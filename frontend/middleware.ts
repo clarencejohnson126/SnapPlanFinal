@@ -35,34 +35,41 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Create Supabase client for auth
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
+  // Check if Supabase env vars are configured
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Refresh session if expired - important for Server Components
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+
+  // Only create Supabase client if env vars are set
+  if (supabaseUrl && supabaseKey) {
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseKey,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value)
+            );
+            response = NextResponse.next({
+              request,
+            });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options)
+            );
+          },
+        },
+      }
+    );
+
+    // Refresh session if expired - important for Server Components
+    const { data } = await supabase.auth.getUser();
+    user = data?.user;
+  }
 
   // Check if accessing protected routes without auth
   const isProtectedRoute = protectedRoutes.some((route) =>
