@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { login } from "../actions";
 
-export default function LoginPage() {
+function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const searchParams = useSearchParams();
@@ -122,5 +122,30 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function LoginFormSkeleton() {
+  return (
+    <div className="bg-[#1A2942] rounded-xl shadow-xl border border-white/10 p-8 animate-pulse">
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#00D4AA]/10 mb-4" />
+        <div className="h-8 bg-white/10 rounded w-48 mx-auto mb-2" />
+        <div className="h-4 bg-white/10 rounded w-64 mx-auto" />
+      </div>
+      <div className="space-y-4">
+        <div className="h-12 bg-white/10 rounded" />
+        <div className="h-12 bg-white/10 rounded" />
+        <div className="h-12 bg-white/10 rounded" />
+      </div>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginFormSkeleton />}>
+      <LoginForm />
+    </Suspense>
   );
 }

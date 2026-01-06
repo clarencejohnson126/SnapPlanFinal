@@ -67,12 +67,31 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   } = await supabase.auth.getUser();
 
   // Fetch project
+  if (!user?.id) {
+    notFound();
+  }
+
+  type Project = {
+    id: string;
+    name: string;
+    description: string | null;
+    created_at: string;
+  };
+
+  type FileRecord = {
+    id: string;
+    name: string;
+    mime_type: string | null;
+    size_bytes: number | null;
+    created_at: string;
+  };
+
   const { data: project, error: projectError } = await supabase
     .from("projects")
     .select("*")
     .eq("id", id)
-    .eq("user_id", user?.id)
-    .single();
+    .eq("user_id", user.id)
+    .single() as { data: Project | null; error: unknown };
 
   if (projectError || !project) {
     notFound();
@@ -83,9 +102,18 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     .from("files")
     .select("*")
     .eq("project_id", id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }) as { data: FileRecord[] | null };
 
   // Fetch jobs with totals
+  type JobWithRelations = {
+    id: string;
+    status: string;
+    job_type: string | null;
+    created_at: string;
+    files: { name: string } | null;
+    job_totals: { total_rooms: number; total_area_m2: number } | null;
+  };
+
   const { data: jobs } = await supabase
     .from("jobs")
     .select(`
@@ -94,7 +122,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       job_totals(total_rooms, total_area_m2)
     `)
     .eq("project_id", id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }) as { data: JobWithRelations[] | null };
 
   // Calculate project stats
   const totalFiles = files?.length || 0;
@@ -286,8 +314,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {jobs.map((job) => {
-                  const totals = job.job_totals as { total_rooms?: number; total_area_m2?: number } | null;
-                  const fileName = (job.files as { name: string } | null)?.name || "Unknown";
+                  const totals = job.job_totals;
+                  const fileName = job.files?.name || "Unknown";
                   return (
                     <tr
                       key={job.id}

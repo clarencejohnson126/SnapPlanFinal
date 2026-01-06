@@ -102,7 +102,7 @@ export default function ResultsPage({ params }: PageProps) {
     status: string;
     error_message?: string;
     config: Record<string, unknown>;
-    files?: { name: string };
+    files: { name: string } | null;
   } | null>(null);
   const [areas, setAreas] = useState<AreaResult[]>([]);
   const [totals, setTotals] = useState<{
@@ -117,6 +117,14 @@ export default function ResultsPage({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState("areas");
 
   // Fetch job data
+  type JobData = {
+    id: string;
+    status: string;
+    error_message?: string;
+    config: Record<string, unknown>;
+    files: { name: string } | null;
+  };
+
   const fetchData = useCallback(async () => {
     try {
       // Fetch job
@@ -124,7 +132,7 @@ export default function ResultsPage({ params }: PageProps) {
         .from("jobs")
         .select("*, files(name)")
         .eq("id", jobId)
-        .single();
+        .single() as { data: JobData | null; error: unknown };
 
       if (jobError) throw jobError;
       setJob(jobData);

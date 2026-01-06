@@ -66,7 +66,8 @@ export default function UploadPage({ params }: PageProps) {
       }
 
       // 2. Create file record in database
-      const { data: fileRecord, error: fileError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: fileRecord, error: fileError } = await (supabase as any)
         .from("files")
         .insert({
           id: fileId,
@@ -78,22 +79,23 @@ export default function UploadPage({ params }: PageProps) {
           size_bytes: selectedFile.size,
         })
         .select("id")
-        .single();
+        .single() as { data: { id: string } | null; error: unknown };
 
       if (fileError) {
-        throw new Error(`File record creation failed: ${fileError.message}`);
+        throw new Error(`File record creation failed: ${String(fileError)}`);
       }
 
       setIsUploading(false);
       setIsProcessing(true);
 
       // 3. Create job
-      const { data: job, error: jobError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: job, error: jobError } = await (supabase as any)
         .from("jobs")
         .insert({
           user_id: user.id,
           project_id: projectId,
-          file_id: fileRecord.id,
+          file_id: fileRecord?.id,
           job_type: "area_text",
           status: "queued",
           config: {
@@ -101,10 +103,10 @@ export default function UploadPage({ params }: PageProps) {
           },
         })
         .select("id")
-        .single();
+        .single() as { data: { id: string } | null; error: unknown };
 
-      if (jobError) {
-        throw new Error(`Job creation failed: ${jobError.message}`);
+      if (jobError || !job) {
+        throw new Error(`Job creation failed: ${jobError ? String(jobError) : "Unknown error"}`);
       }
 
       // 4. Trigger processing via Edge Function (or API route)

@@ -146,11 +146,21 @@ export default async function ProjectsPage() {
   }> = [];
 
   try {
+    if (!user?.id) {
+      return (
+        <div className="space-y-6">
+          <div className="text-center text-[#94A3B8] py-8">
+            Please sign in to view your projects.
+          </div>
+        </div>
+      );
+    }
+
     const { data } = await supabase
       .from("projects")
       .select("id, name, description, created_at")
-      .eq("user_id", user?.id)
-      .order("created_at", { ascending: false });
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }) as { data: { id: string; name: string; description?: string; created_at: string }[] | null };
 
     if (data) {
       projects = await Promise.all(

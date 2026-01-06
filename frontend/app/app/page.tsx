@@ -164,11 +164,13 @@ export default async function DashboardPage() {
   let monthlyJobs = 0;
 
   try {
-    const { count } = await supabase
-      .from("projects")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user?.id);
-    projectCount = count || 0;
+    if (user?.id) {
+      const { count } = await supabase
+        .from("projects")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      projectCount = count || 0;
+    }
   } catch {
     // Table might not exist yet
   }
@@ -176,7 +178,7 @@ export default async function DashboardPage() {
   try {
     const { data: totals } = await supabase
       .from("job_totals")
-      .select("total_area_m2, job_id");
+      .select("total_area_m2, job_id") as { data: { total_area_m2: number; job_id: string }[] | null };
     totalArea =
       totals?.reduce((sum, t) => sum + (t.total_area_m2 || 0), 0) || 0;
   } catch {
@@ -184,25 +186,29 @@ export default async function DashboardPage() {
   }
 
   try {
-    const { count } = await supabase
-      .from("jobs")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user?.id);
-    jobCount = count || 0;
+    if (user?.id) {
+      const { count } = await supabase
+        .from("jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      jobCount = count || 0;
+    }
   } catch {
     // Table might not exist yet
   }
 
   try {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    if (user?.id) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { count } = await supabase
-      .from("jobs")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user?.id)
-      .gte("created_at", thirtyDaysAgo.toISOString());
-    monthlyJobs = count || 0;
+      const { count } = await supabase
+        .from("jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", thirtyDaysAgo.toISOString());
+      monthlyJobs = count || 0;
+    }
   } catch {
     // Table might not exist yet
   }
@@ -216,28 +222,30 @@ export default async function DashboardPage() {
   }> = [];
 
   try {
-    const { data } = await supabase
-      .from("projects")
-      .select("id, name, created_at")
-      .eq("user_id", user?.id)
-      .order("created_at", { ascending: false })
-      .limit(5);
+    if (user?.id) {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(5) as { data: { id: string; name: string; created_at: string }[] | null };
 
-    if (data) {
-      // Get file counts for each project
-      recentProjects = await Promise.all(
-        data.map(async (project) => {
-          const { count } = await supabase
-            .from("files")
-            .select("*", { count: "exact", head: true })
-            .eq("project_id", project.id);
+      if (data) {
+        // Get file counts for each project
+        recentProjects = await Promise.all(
+          data.map(async (project) => {
+            const { count } = await supabase
+              .from("files")
+              .select("*", { count: "exact", head: true })
+              .eq("project_id", project.id);
 
-          return {
-            ...project,
-            file_count: count || 0,
-          };
-        })
-      );
+            return {
+              ...project,
+              file_count: count || 0,
+            };
+          })
+        );
+      }
     }
   } catch {
     // Table might not exist yet
@@ -253,29 +261,39 @@ export default async function DashboardPage() {
   }> = [];
 
   try {
-    const { data } = await supabase
-      .from("jobs")
-      .select(
-        `
-        id,
-        status,
-        created_at,
-        projects(name),
-        files(name)
-      `
-      )
-      .eq("user_id", user?.id)
-      .order("created_at", { ascending: false })
-      .limit(5);
+    if (user?.id) {
+      type JobWithRelations = {
+        id: string;
+        status: string;
+        created_at: string;
+        projects: { name: string } | null;
+        files: { name: string } | null;
+      };
 
-    if (data) {
-      recentJobs = data.map((job) => ({
-        id: job.id,
-        status: job.status,
-        created_at: job.created_at,
-        project_name: (job.projects as { name: string } | null)?.name || "Unknown",
-        file_name: (job.files as { name: string } | null)?.name || "Unknown",
-      }));
+      const { data } = await supabase
+        .from("jobs")
+        .select(
+          `
+          id,
+          status,
+          created_at,
+          projects(name),
+          files(name)
+        `
+        )
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(5) as { data: JobWithRelations[] | null };
+
+      if (data) {
+        recentJobs = data.map((job) => ({
+          id: job.id,
+          status: job.status,
+          created_at: job.created_at,
+          project_name: job.projects?.name || "Unknown",
+          file_name: job.files?.name || "Unknown",
+        }));
+      }
     }
   } catch {
     // Table might not exist yet

@@ -25,6 +25,12 @@ opencv-python>=4.8.0  # Image processing
 ultralytics>=8.0.0    # YOLO object detection (optional - local CV)
 httpx>=0.25.0         # HTTP client for Roboflow API
 
+# Excel export
+openpyxl>=3.1.0  # Excel file generation for Aufmaß export
+
+# LLM interpretation
+openai>=1.0.0  # OpenAI API for summary generation and smart tips
+
 # Testing
 pytest>=7.4.0
 pytest-asyncio>=0.21.0

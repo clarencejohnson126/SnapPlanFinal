@@ -1676,3 +1676,155 @@ async def extract_flooring_geometry(
             temp_path.unlink()
         if Path(temp_dir).exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# =============================================================================
+# Room Area Extraction (NRF-based, Deterministic)
+# =============================================================================
+
+
+class RoomAreaItemResponse(BaseModel):
+    """Response model for a single room with extracted NRF area."""
+    room_id: str
+    name: Optional[str] = None
+    area_m2: float
+    counted_m2: float
+    factor: float
+    page: int
+    source_text: str
+    bbox: Dict[str, float]
+    room_type: str = "standard"
+    name_source: Optional[Dict[str, Any]] = None
+    factor_source: Optional[Dict[str, Any]] = None
+
+
+class RoomAreaResponse(BaseModel):
+    """Response model for room area extraction."""
+    gewerk_id: str
+    gewerk_type: str = "flooring"
+    source_file: str
+    extraction_method: str
+    rooms: List[RoomAreaItemResponse]
+    total_area_m2: float
+    sum_counted_m2: float
+    page_count: int
+    missing: List[Dict[str, Any]]
+    warnings: List[str]
+
+
+@router.post("/flooring/nrf", response_model=RoomAreaResponse)
+async def extract_room_areas_nrf(
+    file: UploadFile = File(..., description="Floor plan PDF with NRF annotations"),
+    pages: Optional[str] = Query(
+        None,
+        description="Comma-separated page numbers (0-indexed). Leave empty for all pages.",
+    ),
+    balcony_factor: float = Query(
+        0.5,
+        ge=0.0,
+        le=1.0,
+        description="Factor for balcony/terrace areas (default 0.5 = 50%)",
+    ),
+):
+    """
+    Deterministic extraction of room areas from German CAD PDFs.
+
+    Extracts NRF (Netto-Raumfläche) values from text annotations with full traceability.
+    Every extracted value includes source_text and bounding box coordinates.
+
+    **Hard Rules:**
+    - Only extracts values that exist as text in the PDF
+    - No inference, no guessing, no LLM generation
+    - Missing values are explicitly tracked and excluded from totals
+
+    **Patterns Recognized:**
+    - "NRF: 22,79 m²" (primary pattern)
+    - "BGF: 100,00 m²" (Bruttogrundfläche)
+    - "NGF: 50,00 m²" (Nettogrundfläche)
+
+    **Balcony Handling:**
+    - Rooms with "Balkon", "Terrasse", "Loggia" in name get reduced factor
+    - If "50%: X m²" explicit value found, uses that instead of calculation
+
+    **Returns:**
+    - rooms: List of extracted rooms with full traceability
+    - total_area_m2: Sum of all area_m2 values
+    - sum_counted_m2: Sum of all counted_m2 values (after balcony factor)
+    - missing: Pages where no patterns were found
+    """
+    from ..services.room_area_extraction import extract_room_areas
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"File must be a PDF, got: {file.filename}",
+        )
+
+    # Parse pages parameter
+    page_list = None
+    if pages:
+        try:
+            page_list = [int(p.strip()) for p in pages.split(",")]
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid pages parameter: {pages}. Use comma-separated integers.",
+            )
+
+    # Save uploaded file to temp location
+    temp_dir = tempfile.mkdtemp()
+    temp_path = Path(temp_dir) / file.filename
+
+    try:
+        with open(temp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Extract room areas using deterministic NRF extraction
+        result = extract_room_areas(
+            pdf_path=temp_path,
+            pages=page_list,
+            default_balcony_factor=balcony_factor,
+        )
+
+        # Convert rooms to response format
+        rooms = []
+        for room in result.rooms:
+            rooms.append(RoomAreaItemResponse(
+                room_id=room.room_id,
+                name=room.name,
+                area_m2=room.area_m2,
+                counted_m2=room.counted_m2,
+                factor=room.factor,
+                page=room.page,
+                source_text=room.source_text,
+                bbox=room.bbox.to_dict(),
+                room_type=room.room_type,
+                name_source=room.name_source,
+                factor_source=room.factor_source,
+            ))
+
+        # Convert missing to response format
+        missing = [m.to_dict() for m in result.missing]
+
+        return RoomAreaResponse(
+            gewerk_id=f"gew_{uuid4().hex[:12]}",
+            gewerk_type="flooring",
+            source_file=file.filename or "unknown.pdf",
+            extraction_method=result.extraction_method,
+            rooms=rooms,
+            total_area_m2=result.total_area_m2,
+            sum_counted_m2=result.sum_counted_m2,
+            page_count=result.page_count,
+            missing=missing,
+            warnings=result.warnings,
+        )
+
+    finally:
+        # Clean up temp files
+        if temp_path.exists():
+            temp_path.unlink()
+        if Path(temp_dir).exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)

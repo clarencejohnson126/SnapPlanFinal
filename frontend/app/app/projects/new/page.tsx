@@ -38,7 +38,8 @@ export default function NewProjectPage() {
       }
 
       // Create project
-      const { data, error: createError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: createError } = await (supabase as any)
         .from("projects")
         .insert({
           name: name.trim(),
@@ -46,10 +47,10 @@ export default function NewProjectPage() {
           user_id: user.id,
         })
         .select("id")
-        .single();
+        .single() as { data: { id: string } | null; error: unknown };
 
-      if (createError) {
-        throw createError;
+      if (createError || !data) {
+        throw createError || new Error("Failed to create project");
       }
 
       // Redirect to project page
