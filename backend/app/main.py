@@ -76,7 +76,11 @@ app.add_middleware(
         "http://localhost:3006",
         "http://127.0.0.1:3006",
         "https://*.supabase.co",  # Supabase Edge Functions
-        "https://*.supabase.net", # Supabase alternate domain
+        "https://*.supabase.net",  # Supabase alternate domain
+        # Production domains
+        "https://snapplan.tech",
+        "https://www.snapplan.tech",
+        "https://*.vercel.app",  # Vercel preview deployments
     ],
     allow_credentials=True,
     allow_methods=["*"],
