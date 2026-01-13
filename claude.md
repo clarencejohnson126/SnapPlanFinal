@@ -39,19 +39,36 @@ INPUT ROUTER (input_router.py)
 └── Photo → Roboflow CV
           ↓
 MEASUREMENT ENGINE → Quantities (m², count, dimensions)
+          ↓
+EXPORT → Excel/CSV with full audit trail
 ```
 
-### Key Service Flow
+### Backend Services (`backend/app/services/`)
 
-1. **Input Router** (`app/services/input_router.py`): Detects `InputType.CAD_WITH_TEXT`, `CAD_NO_TEXT`, `SCANNED_PDF`, or `PHOTO`
-2. **Unified Extraction** (`app/services/unified_extraction.py`): Multi-style room extraction (Haardtring, LeiQ, Omniturm patterns)
-3. **Room Area Extraction** (`app/services/room_area_extraction.py`): Deterministic NRF extraction with full traceability
-4. **Trade Modules** (`app/services/gewerke.py`): Door classification, flooring/drywall area extraction
-5. **Vector Measurement** (`app/services/vector_measurement.py`): PDF geometry parsing with PyMuPDF
-6. **Roboflow Service** (`app/services/roboflow_service.py`): CV for scans/photos
-7. **LLM Interpretation** (`app/services/llm_interpretation.py`): OpenAI-powered summaries (post-extraction only)
-8. **Excel Export** (`app/services/excel_export.py`): Aufmaß-ready Excel/CSV export
-9. **Persistence** (`app/services/persistence.py`): Supabase storage (optional)
+| Service | Purpose |
+|---------|---------|
+| `input_router.py` | Detects `InputType.CAD_WITH_TEXT`, `CAD_NO_TEXT`, `SCANNED_PDF`, or `PHOTO` |
+| `unified_extraction.py` | Multi-style room extraction (Haardtring, LeiQ, Omniturm patterns) |
+| `room_area_extraction.py` | Deterministic NRF extraction with full traceability |
+| `gewerke.py` | Trade modules: door classification, flooring/drywall area extraction |
+| `vector_measurement.py` | PDF geometry parsing with PyMuPDF |
+| `scale_calibration.py` | Scale detection (Maßstab 1:100) |
+| `schedule_extraction.py` | Table parsing via pdfplumber |
+| `cv_pipeline.py` | YOLO door detection + Roboflow integration |
+| `llm_interpretation.py` | OpenAI-powered summaries (post-extraction only) |
+| `excel_export.py` | Aufmaß-ready Excel/CSV export |
+| `persistence.py` | Supabase storage (optional) |
+
+### Frontend Structure (`frontend/`)
+
+| Path | Purpose |
+|------|---------|
+| `app/page.tsx` | Public landing page |
+| `app/app/` | Protected routes (dashboard, scan, projects, settings) |
+| `app/app/scan/page.tsx` | Main PDF upload and extraction UI |
+| `lib/api.ts` | FastAPI client - all backend API calls |
+| `lib/types.ts` | TypeScript interfaces matching backend models |
+| `lib/supabase/` | Supabase client utilities |
 
 ### Trade Modules (Gewerke)
 
@@ -108,6 +125,28 @@ NEXT_PUBLIC_SNAPGRID_API_URL=http://localhost:8000
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
+## Blueprint Style Detection
+
+The `unified_extraction.py` service auto-detects building types:
+
+| Style | Pattern | Room Format | Building Type |
+|-------|---------|-------------|---------------|
+| Haardtring | `F:` | `R2.E5.3.5` | Residential |
+| LeiQ | `NRF:` | `B.00.2.002` | Commercial/Office |
+| Omniturm | `NGF:` | `33_b6.12` | Highrise |
+
+**Pattern Detection Strategy:**
+1. First try `NRF:` pattern (Netto-Raumfläche)
+2. Then try `F:` pattern (Fläche)
+3. Auto-detect room number format
+
+**Key extraction rules:**
+- German blueprints use `F:` or `NRF:` for area in m²
+- Outdoor spaces (Dachterrasse, Terrasse, Balkon) get 50% factor
+- Text extraction may split values across two lines
+- Always convert German decimal comma `,` to `.` for parsing
+- LeiQ includes U: (perimeter) and LH: (height) - useful for drywall/volume
+
 ## Test Files
 
 Sample PDFs in `PLANS/` directory. Sample door schedule: `Tuerenliste_Bauteil_B_OG1.pdf`.
@@ -117,11 +156,7 @@ Sample PDFs in `PLANS/` directory. Sample door schedule: `Tuerenliste_Bauteil_B_
 curl -X POST "http://localhost:8000/api/v1/schedules/extract?use_sample=true"
 ```
 
-## Database Schema (Supabase)
-
-Core tables: `projects`, `files`, `jobs`, `area_results`, `job_totals`, `scale_contexts`, `sectors`, `detected_objects`, `measurements`. Schema in `backend/infra/supabase/mvp_schema.sql`.
-
-## Key Test Modules
+### Key Test Modules
 
 | Test File | Coverage |
 |-----------|----------|
@@ -132,6 +167,10 @@ Core tables: `projects`, `files`, `jobs`, `area_results`, `job_totals`, `scale_c
 | `test_scale_calibration.py` | Scale detection (Maßstab 1:100) |
 | `test_cv_pipeline.py` | YOLO + Roboflow integration |
 | `test_schedule_extraction.py` | Door schedule table parsing |
+
+## Database Schema (Supabase)
+
+Core tables: `projects`, `files`, `jobs`, `area_results`, `job_totals`, `scale_contexts`, `sectors`, `detected_objects`, `measurements`. Schema in `backend/infra/supabase/mvp_schema.sql`.
 
 ## YOLO Door Detector
 
@@ -149,41 +188,10 @@ Custom YOLOv8n model for door detection in architectural blueprints:
 
 ## Verified Extraction Workflows
 
-Documented extraction workflows with verified test results. These serve as reference for building the standalone web application.
+Documented extraction workflows with verified test results in `backend/docs/workflows/`:
 
-| Workflow | Building Type | Area Label | Room Stamps | Doc |
-|----------|--------------|------------|-------------|-----|
-| Haardtring Riegel | Residential | F: | External boxes | `backend/docs/workflows/m2_extraction_haardtring_riegel_building.md` |
-| LeiQ Office | Commercial | NRF: | Inside drawings | `backend/docs/workflows/m2_extraction_leiq_office_building.md` |
-| Omniturm Highrise | Highrise | NGF: | Inside + reversed Schacht | `backend/docs/workflows/m2_extraction_omniturm_highrise.md` |
-
-**Pattern Detection Strategy:**
-1. First try `NRF:` pattern (Netto-Raumfläche)
-2. Then try `F:` pattern (Fläche)
-3. Auto-detect room number format: `B.00.2.002` vs `R2.E5.3.5`
-
-**Key learnings:**
-- German blueprints use `F:` or `NRF:` for area in m²
-- Room number formats vary by project
-- Outdoor spaces (Dachterrasse, Terrasse, Balkon) get 50% factor
-- Text extraction may split values across two lines
-- Always convert German decimal comma `,` to `.` for parsing
-- LeiQ includes U: (perimeter) and LH: (height) - useful for drywall/volume
-
-**Web App Architecture:**
-1. **Extraction Layer**: Deterministic Python code (no AI) - 100% traceable
-2. **Storage Layer**: Supabase with full audit trail
-3. **Interpretation Layer**: OpenAI API for summaries/tips (post-extraction only, never for number extraction)
-4. **Export Layer**: Excel/CSV with German formatting for Aufmaß workflows
-
-## Blueprint Style Detection
-
-The `unified_extraction.py` service auto-detects building types:
-
-| Style | Pattern | Room Format | Building Type |
-|-------|---------|-------------|---------------|
-| Haardtring | `F:` | `R2.E5.3.5` | Residential |
-| LeiQ | `NRF:` | `B.00.2.002` | Commercial/Office |
-| Omniturm | `NGF:` | `33_b6.12` | Highrise |
-
-Each style has specific regex patterns for room numbers, area values, and category detection.
+| Workflow | Building Type | Area Label | Doc |
+|----------|--------------|------------|-----|
+| Haardtring Riegel | Residential | F: | `m2_extraction_haardtring_riegel_building.md` |
+| LeiQ Office | Commercial | NRF: | `m2_extraction_leiq_office_building.md` |
+| Omniturm Highrise | Highrise | NGF: | `m2_extraction_omniturm_highrise.md` |

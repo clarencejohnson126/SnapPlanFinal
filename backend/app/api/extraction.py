@@ -38,6 +38,11 @@ from ..services.excel_export import (
     export_to_csv,
     is_excel_available,
 )
+from ..services.revision_cloud_detection import (
+    detect_revision_clouds,
+    match_clouds_to_rooms,
+    RevisionCloudResult,
+)
 
 
 router = APIRouter(prefix="/extraction", tags=["extraction"])
@@ -82,6 +87,25 @@ class ExtractionSummaryResponse(BaseModel):
     by_category: List[CategoryTotalResponse]
 
 
+class RevisionCloudResponse(BaseModel):
+    """Response model for a single revision cloud."""
+    page: int
+    bbox: Dict[str, float]
+    color: Dict[str, int]
+    confidence: float
+    arc_count: int
+    associated_text: Optional[str] = None
+    affected_room_numbers: List[str] = []
+
+
+class RevisionCloudSummaryResponse(BaseModel):
+    """Response model for revision cloud summary."""
+    clouds: List[RevisionCloudResponse]
+    total_count: int
+    pages_with_clouds: List[int]
+    warning_message: str
+
+
 class RoomExtractionResponse(BaseModel):
     """Response model for room extraction endpoint."""
     extraction_id: str
@@ -90,6 +114,7 @@ class RoomExtractionResponse(BaseModel):
     summary: ExtractionSummaryResponse
     rooms: List[ExtractedRoomResponse]
     warnings: List[str]
+    revision_clouds: Optional[RevisionCloudSummaryResponse] = None
 
 
 class StyleDetectionResponse(BaseModel):
@@ -259,6 +284,40 @@ async def extract_rooms(
             by_category=category_totals,
         )
 
+        # Detect revision clouds
+        revision_cloud_response = None
+        try:
+            cloud_result = detect_revision_clouds(temp_path, pages=page_list)
+            if cloud_result.total_count > 0:
+                # Match clouds to rooms
+                room_dicts = [r.to_dict() for r in result.rooms]
+                matched_clouds = match_clouds_to_rooms(cloud_result.clouds, room_dicts)
+
+                revision_cloud_response = RevisionCloudSummaryResponse(
+                    clouds=[
+                        RevisionCloudResponse(
+                            page=c.page,
+                            bbox=c.bbox.to_dict(),
+                            color={
+                                "r": int(c.color[0] * 255),
+                                "g": int(c.color[1] * 255),
+                                "b": int(c.color[2] * 255),
+                            },
+                            confidence=c.confidence,
+                            arc_count=c.arc_count,
+                            associated_text=c.associated_text,
+                            affected_room_numbers=c.affected_room_numbers,
+                        )
+                        for c in matched_clouds
+                    ],
+                    total_count=cloud_result.total_count,
+                    pages_with_clouds=cloud_result.pages_with_clouds,
+                    warning_message=cloud_result.warning_message,
+                )
+        except Exception as e:
+            # Don't fail extraction if cloud detection fails
+            result.warnings.append(f"Revision cloud detection failed: {str(e)}")
+
         return RoomExtractionResponse(
             extraction_id=f"ext_{uuid4().hex[:12]}",
             source_file=file.filename,
@@ -266,6 +325,7 @@ async def extract_rooms(
             summary=summary,
             rooms=rooms,
             warnings=result.warnings,
+            revision_clouds=revision_cloud_response,
         )
 
     finally:

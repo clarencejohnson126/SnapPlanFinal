@@ -1,33 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { clsx } from "clsx";
-
-type Language = "de" | "en";
+import { useLanguage } from "@/lib/i18n";
 
 export function LanguageToggle() {
-  // In a real implementation, this would be connected to next-intl
-  // For now, we'll use localStorage to persist the preference
-  const [language, setLanguage] = useState<Language>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("language") as Language) || "de";
-    }
-    return "de";
-  });
-
-  const handleToggle = (lang: Language) => {
-    setLanguage(lang);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("language", lang);
-      // In a real implementation, this would update the locale
-      // For now, just refresh to apply (would use next-intl router)
-    }
-  };
+  const { language, setLanguage } = useLanguage();
 
   return (
     <div className="flex items-center bg-[#1A2942] rounded-lg p-0.5">
       <button
-        onClick={() => handleToggle("de")}
+        onClick={() => setLanguage("de")}
         className={clsx(
           "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
           language === "de"
@@ -38,7 +20,7 @@ export function LanguageToggle() {
         DE
       </button>
       <button
-        onClick={() => handleToggle("en")}
+        onClick={() => setLanguage("en")}
         className={clsx(
           "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
           language === "en"

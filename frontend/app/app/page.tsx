@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useLanguage } from "@/lib/i18n";
 
 // Stats card component
 function StatCard({
@@ -20,15 +23,17 @@ function StatCard({
 }
 
 export default function DashboardPage() {
+  const { t } = useLanguage();
+
   return (
     <div className="space-y-8">
       {/* Welcome header */}
       <div>
         <h1 className="text-2xl font-bold text-white">
-          Welcome to SnapPlan
+          {t.dashboard.welcome}
         </h1>
         <p className="text-[#94A3B8] mt-1">
-          Extract room areas from construction documents instantly
+          {t.dashboard.subtitle}
         </p>
       </div>
 
@@ -53,12 +58,12 @@ export default function DashboardPage() {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-white mb-2">Quick Scan</h2>
+          <h2 className="text-xl font-semibold text-white mb-2">{t.dashboard.quickScan}</h2>
           <p className="text-[#94A3B8]">
-            Upload a floor plan PDF and extract room areas instantly. Get results in seconds with full traceability.
+            {t.dashboard.quickScanDesc}
           </p>
           <div className="mt-4 inline-flex items-center gap-2 text-[#00D4AA] font-medium">
-            Start Scanning
+            {t.dashboard.startScanning}
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
@@ -81,40 +86,29 @@ export default function DashboardPage() {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-white mb-2">How It Works</h2>
+          <h2 className="text-xl font-semibold text-white mb-2">{t.dashboard.howItWorks}</h2>
           <ol className="text-[#94A3B8] space-y-2 list-decimal list-inside">
-            <li>Upload your CAD-exported PDF floor plan</li>
-            <li>SnapPlan extracts room areas automatically</li>
-            <li>Review results with full audit trail</li>
-            <li>Export to Excel, CSV, or PDF</li>
+            <li>{t.dashboard.step1}</li>
+            <li>{t.dashboard.step2}</li>
+            <li>{t.dashboard.step3}</li>
+            <li>{t.dashboard.step4}</li>
           </ol>
         </div>
       </div>
 
       {/* Features */}
       <div>
-        <h2 className="text-lg font-semibold text-white mb-4">Supported Formats</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[#1A2942] rounded-xl border border-white/5 p-5">
-            <code className="text-[#00D4AA] font-mono text-lg">NRF:</code>
-            <p className="text-[#94A3B8] text-sm mt-2">Netto-Raumfläche (Office buildings)</p>
-          </div>
-          <div className="bg-[#1A2942] rounded-xl border border-white/5 p-5">
-            <code className="text-[#00D4AA] font-mono text-lg">F:</code>
-            <p className="text-[#94A3B8] text-sm mt-2">Fläche (Residential buildings)</p>
-          </div>
-          <div className="bg-[#1A2942] rounded-xl border border-white/5 p-5">
-            <code className="text-[#00D4AA] font-mono text-lg">NGF:</code>
-            <p className="text-[#94A3B8] text-sm mt-2">Netto-Grundfläche (Highrise)</p>
-          </div>
+        <h2 className="text-lg font-semibold text-white mb-4">{t.dashboard.extractionPattern}</h2>
+        <div className="bg-[#1A2942] rounded-xl border border-white/5 p-5 max-w-md">
+          <code className="text-[#00D4AA] font-mono text-lg">NGF:</code>
+          <p className="text-[#94A3B8] text-sm mt-2">{t.dashboard.ngfDesc}</p>
         </div>
       </div>
 
       {/* Info cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard label="Extraction Method" value="Text-based" subtitle="100% deterministic" />
-        <StatCard label="Balcony Factor" value="50%" subtitle="auto-applied" />
-        <StatCard label="Export Formats" value="3" subtitle="Excel, CSV, PDF" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <StatCard label={t.dashboard.extractionMethod} value={t.dashboard.textBased} subtitle={t.dashboard.deterministic} />
+        <StatCard label={t.dashboard.exportFormats} value="3" subtitle={t.dashboard.exportFormatsDesc} />
       </div>
     </div>
   );

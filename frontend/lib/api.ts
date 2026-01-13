@@ -25,6 +25,23 @@ export interface ExtractedRoom {
   };
 }
 
+export interface RevisionCloud {
+  page: number;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+  color: { r: number; g: number; b: number };
+  confidence: number;
+  arc_count: number;
+  associated_text?: string;
+  affected_room_numbers: string[];
+}
+
+export interface RevisionCloudSummary {
+  clouds: RevisionCloud[];
+  total_count: number;
+  pages_with_clouds: number[];
+  warning_message: string;
+}
+
 export interface ExtractionResult {
   rooms: ExtractedRoom[];
   total_area_m2: number;
@@ -35,6 +52,7 @@ export interface ExtractionResult {
   extraction_method: string;
   warnings: string[];
   totals_by_category: Record<string, number>;
+  revision_clouds?: RevisionCloudSummary;
 }
 
 export interface InterpretationResult {
@@ -74,6 +92,24 @@ export async function detectStyle(file: File): Promise<{ style: string; confiden
   return response.json();
 }
 
+// Backend response structure (nested)
+interface BackendExtractionResponse {
+  extraction_id: string;
+  source_file: string;
+  extracted_at: string;
+  summary: {
+    total_rooms: number;
+    total_area_m2: number;
+    total_counted_m2: number;
+    blueprint_style: string;
+    page_count: number;
+    by_category: Array<{ category: string; area_m2: number; room_count: number }>;
+  };
+  rooms: ExtractedRoom[];
+  warnings: string[];
+  revision_clouds?: RevisionCloudSummary;
+}
+
 // Extract rooms from PDF
 export async function extractRooms(
   file: File,
@@ -99,7 +135,28 @@ export async function extractRooms(
     const error = await response.json();
     throw new Error(error.detail || 'Extraction failed');
   }
-  return response.json();
+
+  // Transform backend response to frontend format
+  const backendData: BackendExtractionResponse = await response.json();
+
+  // Convert by_category array to totals_by_category object
+  const totals_by_category: Record<string, number> = {};
+  for (const cat of backendData.summary.by_category) {
+    totals_by_category[cat.category] = cat.area_m2;
+  }
+
+  return {
+    rooms: backendData.rooms,
+    total_area_m2: backendData.summary.total_area_m2,
+    total_counted_m2: backendData.summary.total_counted_m2,
+    room_count: backendData.summary.total_rooms,
+    page_count: backendData.summary.page_count,
+    blueprint_style: backendData.summary.blueprint_style,
+    extraction_method: 'text_pattern',
+    warnings: backendData.warnings,
+    totals_by_category,
+    revision_clouds: backendData.revision_clouds,
+  };
 }
 
 // Extract rooms with AI interpretation
@@ -226,7 +283,10 @@ export async function getInterpretation(
 }
 
 // Format number for display (German format)
-export function formatNumber(num: number, decimals: number = 2): string {
+export function formatNumber(num: number | undefined | null, decimals: number = 2): string {
+  if (num === undefined || num === null || isNaN(num)) {
+    return '0,00';
+  }
   return num.toLocaleString('de-DE', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,

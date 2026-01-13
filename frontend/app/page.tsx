@@ -1,6 +1,12 @@
+"use client";
+
 import Link from "next/link";
+import { useLanguage } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/app/LanguageToggle";
 
 export default function LandingPage() {
+  const { t } = useLanguage();
+
   return (
     <div className="min-h-screen bg-[#0F1B2A]">
       {/* Blueprint background pattern */}
@@ -37,11 +43,12 @@ export default function LandingPage() {
             <span className="text-xl font-bold text-white">SnapPlan</span>
           </div>
           <div className="flex items-center gap-4">
+            <LanguageToggle />
             <Link
               href="/app/scan"
               className="px-4 py-2 rounded-lg bg-[#00D4AA] text-[#0F1B2A] font-semibold hover:bg-[#00D4AA]/90 transition-colors"
             >
-              Try Now
+              {t.landing.tryNow}
             </Link>
           </div>
         </div>
@@ -51,25 +58,24 @@ export default function LandingPage() {
       <main className="relative z-10">
         <div className="max-w-7xl mx-auto px-6 py-24 text-center">
           <h1 className="text-4xl md:text-6xl font-bold text-white max-w-4xl mx-auto leading-tight">
-            Extract construction data with{" "}
-            <span className="text-[#00D4AA]">zero hallucination</span>
+            {t.landing.heroTitle}{" "}
+            <span className="text-[#00D4AA]">{t.landing.heroHighlight}</span>
           </h1>
           <p className="text-xl text-[#94A3B8] mt-6 max-w-2xl mx-auto">
-            Deterministic extraction of room areas, door schedules, and measurements
-            from German construction documents. 100% traceability, full audit trail.
+            {t.landing.heroDescription}
           </p>
           <div className="flex items-center justify-center gap-4 mt-10">
             <Link
               href="/app/scan"
               className="px-6 py-3 rounded-lg bg-[#00D4AA] text-[#0F1B2A] font-semibold hover:bg-[#00D4AA]/90 transition-colors"
             >
-              Upload Blueprint
+              {t.landing.uploadBlueprint}
             </Link>
             <Link
               href="#features"
               className="px-6 py-3 rounded-lg border border-white/10 text-white hover:border-white/20 transition-colors"
             >
-              Learn More
+              {t.landing.learnMore}
             </Link>
           </div>
         </div>
@@ -77,7 +83,7 @@ export default function LandingPage() {
         {/* Features */}
         <div id="features" className="max-w-7xl mx-auto px-6 py-24">
           <h2 className="text-3xl font-bold text-white text-center mb-16">
-            Built for German Construction Documents
+            {t.landing.featuresTitle}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Feature 1 */}
@@ -98,11 +104,10 @@ export default function LandingPage() {
                 </svg>
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
-                NRF Area Extraction
+                {t.landing.feature1Title}
               </h3>
               <p className="text-[#94A3B8]">
-                Extract room areas from CAD floor plans. Automatic detection of
-                NRF (Netto-Raumfläche) values with German decimal comma support.
+                {t.landing.feature1Desc}
               </p>
             </div>
 
@@ -124,11 +129,10 @@ export default function LandingPage() {
                 </svg>
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
-                Full Audit Trail
+                {t.landing.feature2Title}
               </h3>
               <p className="text-[#94A3B8]">
-                Every extracted value traces back to its source. Page number,
-                bounding box, raw text, and confidence score included.
+                {t.landing.feature2Desc}
               </p>
             </div>
 
@@ -150,11 +154,10 @@ export default function LandingPage() {
                 </svg>
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
-                Balcony Factor
+                {t.landing.feature3Title}
               </h3>
               <p className="text-[#94A3B8]">
-                Automatic detection of Balkon, Terrasse, and Loggia with
-                configurable area factors. Standard 0.5 factor applied.
+                {t.landing.feature3Desc}
               </p>
             </div>
           </div>
@@ -164,17 +167,16 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 py-24">
           <div className="bg-gradient-to-r from-[#1A2942] to-[#243B53] rounded-2xl p-12 text-center">
             <h2 className="text-3xl font-bold text-white mb-4">
-              Ready to automate your quantity takeoff?
+              {t.landing.ctaTitle}
             </h2>
             <p className="text-[#94A3B8] max-w-xl mx-auto mb-8">
-              Join construction professionals who trust SnapPlan for accurate,
-              traceable document analysis.
+              {t.landing.ctaDescription}
             </p>
             <Link
               href="/app/scan"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-[#00D4AA] text-[#0F1B2A] font-semibold hover:bg-[#00D4AA]/90 transition-colors"
             >
-              Start Scanning
+              {t.landing.startScanning}
               <svg
                 className="w-5 h-5"
                 fill="none"
@@ -214,11 +216,11 @@ export default function LandingPage() {
                 </svg>
               </div>
               <span className="text-sm text-[#64748B]">
-                SnapPlan - Construction Document Analysis
+                {t.landing.footer}
               </span>
             </div>
             <p className="text-sm text-[#64748B]">
-              Zero hallucination. Full traceability.
+              {t.landing.footerTagline}
             </p>
           </div>
         </div>

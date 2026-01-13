@@ -37,11 +37,11 @@ import {
   generateCSV,
   formatArea,
   formatNumber,
-  getCategoryDisplayName,
   getStyleDisplayName,
   type ExtractionResult,
   type ExtractedRoom,
 } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 
 type Step = "upload" | "processing" | "results";
 type ResultTab = "table" | "charts";
@@ -61,7 +61,11 @@ const CATEGORY_COLORS: Record<string, string> = {
   other: "#64748B",
 };
 
+type SortColumn = "room_number" | "room_name" | "category" | "area_m2" | "factor" | "counted_m2" | "page";
+type SortDirection = "asc" | "desc";
+
 export default function ScanPage() {
+  const { t } = useLanguage();
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +74,69 @@ export default function ScanPage() {
   const [activeTab, setActiveTab] = useState<ResultTab>("table");
   const [isExporting, setIsExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("room_number");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+
+  // Handle column sort
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  // Get sorted and filtered rooms
+  const getSortedRooms = () => {
+    if (!result) return [];
+    let rooms = [...result.rooms];
+
+    // Filter by category
+    if (categoryFilter) {
+      rooms = rooms.filter(r => r.category === categoryFilter);
+    }
+
+    // Sort
+    rooms.sort((a, b) => {
+      let comparison = 0;
+      switch (sortColumn) {
+        case "room_number":
+          comparison = a.room_number.localeCompare(b.room_number);
+          break;
+        case "room_name":
+          comparison = a.room_name.localeCompare(b.room_name);
+          break;
+        case "category":
+          comparison = a.category.localeCompare(b.category);
+          break;
+        case "area_m2":
+          comparison = a.area_m2 - b.area_m2;
+          break;
+        case "factor":
+          comparison = a.factor - b.factor;
+          break;
+        case "counted_m2":
+          comparison = a.counted_m2 - b.counted_m2;
+          break;
+        case "page":
+          comparison = a.page - b.page;
+          break;
+      }
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return rooms;
+  };
+
+  // Check if a room is affected by revision clouds
+  const isRoomAffectedByRevision = (roomNumber: string): boolean => {
+    if (!result?.revision_clouds) return false;
+    return result.revision_clouds.clouds.some(c =>
+      c.affected_room_numbers.includes(roomNumber)
+    );
+  };
 
   // Handle file drop
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -216,7 +283,7 @@ export default function ScanPage() {
                 <tr>
                   <td>${room.room_number}</td>
                   <td>${room.room_name}</td>
-                  <td>${getCategoryDisplayName(room.category)}</td>
+                  <td>${t.common[room.category as keyof typeof t.common] || room.category}</td>
                   <td class="number">${room.area_m2.toFixed(2)}</td>
                   <td class="number">${(room.factor * 100).toFixed(0)}%</td>
                   <td class="number">${room.counted_m2.toFixed(2)}</td>
@@ -255,7 +322,7 @@ export default function ScanPage() {
     if (!result) return [];
     return Object.entries(result.totals_by_category)
       .map(([category, area]) => ({
-        name: getCategoryDisplayName(category),
+        name: t.common[category as keyof typeof t.common] || category,
         value: area,
         color: CATEGORY_COLORS[category] || CATEGORY_COLORS.other,
       }))
@@ -279,9 +346,9 @@ export default function ScanPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Quick Scan</h1>
+          <h1 className="text-2xl font-bold text-white">{t.scan.title}</h1>
           <p className="text-[#94A3B8] mt-1">
-            Extract room areas from floor plans instantly
+            {t.scan.subtitle}
           </p>
         </div>
         {step === "results" && (
@@ -290,7 +357,7 @@ export default function ScanPage() {
               onClick={handleReset}
               className="px-4 py-2.5 rounded-lg border border-white/10 text-[#94A3B8] hover:text-white hover:border-white/20 transition-colors"
             >
-              New Scan
+              {t.scan.newScan}
             </button>
             {/* Export Dropdown */}
             <div className="relative">
@@ -304,7 +371,7 @@ export default function ScanPage() {
                 ) : (
                   <Download className="w-5 h-5" />
                 )}
-                Export
+                {t.scan.export}
                 <ChevronDown className="w-4 h-4" />
               </button>
               {showExportMenu && (
@@ -315,8 +382,8 @@ export default function ScanPage() {
                   >
                     <FileSpreadsheet className="w-5 h-5 text-[#10B981]" />
                     <div>
-                      <div className="font-medium">Excel</div>
-                      <div className="text-xs text-[#64748B]">.xlsx file</div>
+                      <div className="font-medium">{t.scan.excel}</div>
+                      <div className="text-xs text-[#64748B]">{t.scan.xlsxFile}</div>
                     </div>
                   </button>
                   <button
@@ -325,8 +392,8 @@ export default function ScanPage() {
                   >
                     <FileDown className="w-5 h-5 text-[#3B82F6]" />
                     <div>
-                      <div className="font-medium">CSV</div>
-                      <div className="text-xs text-[#64748B]">.csv file</div>
+                      <div className="font-medium">{t.scan.csv}</div>
+                      <div className="text-xs text-[#64748B]">{t.scan.csvFile}</div>
                     </div>
                   </button>
                   <button
@@ -335,8 +402,8 @@ export default function ScanPage() {
                   >
                     <FileText className="w-5 h-5 text-[#EF4444]" />
                     <div>
-                      <div className="font-medium">PDF</div>
-                      <div className="text-xs text-[#64748B]">Print to PDF</div>
+                      <div className="font-medium">{t.scan.pdf}</div>
+                      <div className="text-xs text-[#64748B]">{t.scan.printToPdf}</div>
                     </div>
                   </button>
                 </div>
@@ -349,9 +416,9 @@ export default function ScanPage() {
       {/* Step indicator */}
       <div className="flex items-center gap-4 mb-8">
         {[
-          { key: "upload", label: "Upload" },
-          { key: "processing", label: "Processing" },
-          { key: "results", label: "Results" },
+          { key: "upload", label: t.scan.upload },
+          { key: "processing", label: t.scan.processing },
+          { key: "results", label: t.scan.results },
         ].map((s, i) => (
           <div key={s.key} className="flex items-center gap-4">
             <div
@@ -390,7 +457,7 @@ export default function ScanPage() {
         <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-400 mt-0.5" />
           <div>
-            <p className="text-sm text-red-400 font-medium">Extraction Failed</p>
+            <p className="text-sm text-red-400 font-medium">{t.scan.extractionFailed}</p>
             <p className="text-sm text-red-400/80 mt-1">{error}</p>
           </div>
         </div>
@@ -433,16 +500,16 @@ export default function ScanPage() {
                     {(file.size / 1024 / 1024).toFixed(2)} MB
                   </p>
                   <p className="text-sm text-[#00D4AA] mt-2">
-                    Click or drop to replace
+                    {t.scan.clickToReplace}
                   </p>
                 </>
               ) : (
                 <>
                   <h3 className="text-lg font-medium text-white mb-2">
-                    {isDragActive ? "Drop to upload" : "Drop PDF here or click to browse"}
+                    {isDragActive ? t.scan.dropToUpload : t.scan.dropHere}
                   </h3>
                   <p className="text-sm text-[#64748B]">
-                    Support for CAD-exported floor plans
+                    {t.scan.supportFor}
                   </p>
                 </>
               )}
@@ -452,7 +519,7 @@ export default function ScanPage() {
           {/* Configuration Panel */}
           <div className="bg-[#1A2942] rounded-xl border border-white/5 p-6">
             <h2 className="text-lg font-semibold text-white mb-6">
-              Extraction Settings
+              {t.scan.extractionSettings}
             </h2>
 
             <div className="space-y-6">
@@ -462,47 +529,28 @@ export default function ScanPage() {
                   <Info className="w-5 h-5 text-[#00D4AA] mt-0.5" />
                   <div>
                     <p className="text-sm text-white font-medium">
-                      Auto-Detection Enabled
+                      {t.scan.autoDetection}
                     </p>
                     <p className="text-xs text-[#94A3B8] mt-1">
-                      Blueprint style (Haardtring, LeiQ, Omniturm) is automatically
-                      detected based on text patterns.
+                      {t.scan.autoDetectionDesc}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Supported patterns */}
+              {/* Supported pattern */}
               <div>
                 <label className="block text-sm font-medium text-[#94A3B8] mb-3">
-                  Supported Patterns
+                  {t.scan.supportedPatterns}
                 </label>
                 <div className="space-y-2">
-                  {[
-                    { pattern: "NRF:", desc: "Netto-Raumfläche (Office)" },
-                    { pattern: "F:", desc: "Fläche (Residential)" },
-                    { pattern: "NGF:", desc: "Netto-Grundfläche (Highrise)" },
-                  ].map((p) => (
-                    <div
-                      key={p.pattern}
-                      className="flex items-center justify-between p-3 rounded-lg bg-[#0F1B2A]"
-                    >
-                      <code className="text-[#00D4AA] font-mono text-sm">
-                        {p.pattern}
-                      </code>
-                      <span className="text-xs text-[#64748B]">{p.desc}</span>
-                    </div>
-                  ))}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[#0F1B2A]">
+                    <code className="text-[#00D4AA] font-mono text-sm">
+                      NGF:
+                    </code>
+                    <span className="text-xs text-[#64748B]">{t.scan.ngfDescription}</span>
+                  </div>
                 </div>
-              </div>
-
-              {/* Balcony factor info */}
-              <div className="p-4 rounded-lg bg-[#0F1B2A] border border-white/5">
-                <p className="text-sm text-[#94A3B8]">
-                  <span className="text-white font-medium">Balcony Factor: </span>
-                  Outdoor areas (Balkon, Terrasse, Loggia) are automatically
-                  detected and counted at 50%.
-                </p>
               </div>
 
               <hr className="border-white/5" />
@@ -513,7 +561,7 @@ export default function ScanPage() {
                 disabled={!file}
                 className="w-full py-3 px-4 rounded-lg bg-[#00D4AA] text-[#0F1B2A] font-semibold hover:bg-[#00D4AA]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
-                Start Extraction
+                {t.scan.startExtraction}
                 <ChevronRight className="w-5 h-5" />
               </button>
             </div>
@@ -528,12 +576,12 @@ export default function ScanPage() {
             <Loader2 className="w-12 h-12 text-[#00D4AA] animate-spin" />
           </div>
           <h2 className="text-xl font-semibold text-white mb-2">
-            Extracting Room Areas
+            {t.scan.extractingRooms}
           </h2>
           <p className="text-[#94A3B8] text-center max-w-md">
-            Analyzing {file?.name}...
+            {t.scan.analyzing} {file?.name}...
             <br />
-            This usually takes 5-15 seconds.
+            {t.scan.usuallyTakes}
           </p>
         </div>
       )}
@@ -541,30 +589,70 @@ export default function ScanPage() {
       {/* Results Step */}
       {step === "results" && result && (
         <div className="space-y-6">
+          {/* Revision Cloud Warning */}
+          {result.revision_clouds && result.revision_clouds.total_count > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-amber-500 font-semibold text-sm uppercase tracking-wider">
+                    {t.scan.revisionClouds}
+                  </h3>
+                  <p className="text-amber-200/80 text-sm mt-1">
+                    {result.revision_clouds.warning_message}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {result.revision_clouds.pages_with_clouds.map(page => (
+                      <span key={page} className="px-2 py-1 bg-amber-500/20 rounded text-xs text-amber-300">
+                        Page {page + 1}
+                      </span>
+                    ))}
+                  </div>
+                  {result.revision_clouds.clouds.some(c => c.affected_room_numbers.length > 0) && (
+                    <div className="mt-3">
+                      <p className="text-xs text-amber-300/70 mb-2">{t.scan.potentiallyAffected}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[...new Set(result.revision_clouds.clouds.flatMap(c => c.affected_room_numbers))].map(room => (
+                          <span key={room} className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-300 font-mono">
+                            {room}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-[#1A2942] rounded-xl p-5 border border-white/5">
-              <p className="text-[#94A3B8] text-sm">Rooms</p>
+              <p className="text-[#94A3B8] text-sm">{t.scan.rooms}</p>
               <p className="text-3xl font-bold text-white mt-1">
                 {result.room_count}
               </p>
             </div>
             <div className="bg-[#1A2942] rounded-xl p-5 border border-white/5">
-              <p className="text-[#94A3B8] text-sm">Total Area</p>
+              <p className="text-[#94A3B8] text-sm">{t.scan.totalArea}</p>
               <p className="text-3xl font-bold text-white mt-1">
                 {formatNumber(result.total_area_m2, 0)}
                 <span className="text-lg text-[#94A3B8] ml-1">m²</span>
               </p>
             </div>
             <div className="bg-[#1A2942] rounded-xl p-5 border border-white/5">
-              <p className="text-[#94A3B8] text-sm">Counted Area</p>
+              <p className="text-[#94A3B8] text-sm">{t.scan.countedArea}</p>
               <p className="text-3xl font-bold text-[#00D4AA] mt-1">
                 {formatNumber(result.total_counted_m2, 0)}
                 <span className="text-lg text-[#00D4AA]/70 ml-1">m²</span>
               </p>
             </div>
             <div className="bg-[#1A2942] rounded-xl p-5 border border-white/5">
-              <p className="text-[#94A3B8] text-sm">Blueprint Style</p>
+              <p className="text-[#94A3B8] text-sm">{t.scan.blueprintStyle}</p>
               <p className="text-xl font-semibold text-white mt-1">
                 {getStyleDisplayName(result.blueprint_style)}
               </p>
@@ -582,7 +670,7 @@ export default function ScanPage() {
               }`}
             >
               <Table className="w-4 h-4" />
-              Schedule
+              {t.scan.schedule}
             </button>
             <button
               onClick={() => setActiveTab("charts")}
@@ -593,7 +681,7 @@ export default function ScanPage() {
               }`}
             >
               <BarChart3 className="w-4 h-4" />
-              Report
+              {t.scan.report}
             </button>
           </div>
 
@@ -602,44 +690,145 @@ export default function ScanPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Table */}
               <div className="lg:col-span-2 bg-[#1A2942] rounded-xl border border-white/5 overflow-hidden">
+                {/* Filter Bar */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#0F1B2A]/50">
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-[#64748B]">{t.scan.filter}</span>
+                    <select
+                      value={categoryFilter || ""}
+                      onChange={(e) => setCategoryFilter(e.target.value || null)}
+                      className="bg-[#1A2942] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[#00D4AA]"
+                    >
+                      <option value="">{t.scan.allCategories}</option>
+                      {result && Object.keys(result.totals_by_category).map(cat => (
+                        <option key={cat} value={cat} className="capitalize">{t.common[cat as keyof typeof t.common] || cat}</option>
+                      ))}
+                    </select>
+                    {categoryFilter && (
+                      <button
+                        onClick={() => setCategoryFilter(null)}
+                        className="text-xs text-[#00D4AA] hover:underline"
+                      >
+                        {t.scan.clearFilter}
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-sm text-[#64748B]">
+                    {getSortedRooms().length} {t.scan.roomsCount}
+                    {categoryFilter && ` in ${t.common[categoryFilter as keyof typeof t.common] || categoryFilter}`}
+                  </span>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-white/5">
-                        <th className="text-left text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3">
-                          Room
+                        <th
+                          onClick={() => handleSort("room_number")}
+                          className="text-left text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white transition-colors select-none"
+                        >
+                          <span className="flex items-center gap-1">
+                            {t.scan.room}
+                            {sortColumn === "room_number" && (
+                              <span className="text-[#00D4AA]">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                            )}
+                          </span>
                         </th>
-                        <th className="text-left text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3">
-                          Name
+                        <th
+                          onClick={() => handleSort("room_name")}
+                          className="text-left text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white transition-colors select-none"
+                        >
+                          <span className="flex items-center gap-1">
+                            {t.scan.name}
+                            {sortColumn === "room_name" && (
+                              <span className="text-[#00D4AA]">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                            )}
+                          </span>
                         </th>
-                        <th className="text-right text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3">
-                          Area
+                        <th
+                          onClick={() => handleSort("category")}
+                          className="text-left text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white transition-colors select-none"
+                        >
+                          <span className="flex items-center gap-1">
+                            {t.scan.category}
+                            {sortColumn === "category" && (
+                              <span className="text-[#00D4AA]">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                            )}
+                          </span>
                         </th>
-                        <th className="text-right text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3">
-                          Factor
+                        <th
+                          onClick={() => handleSort("area_m2")}
+                          className="text-right text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white transition-colors select-none"
+                        >
+                          <span className="flex items-center justify-end gap-1">
+                            {t.scan.area}
+                            {sortColumn === "area_m2" && (
+                              <span className="text-[#00D4AA]">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                            )}
+                          </span>
                         </th>
-                        <th className="text-right text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3">
-                          Counted
+                        <th
+                          onClick={() => handleSort("factor")}
+                          className="text-right text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white transition-colors select-none"
+                        >
+                          <span className="flex items-center justify-end gap-1">
+                            {t.scan.factor}
+                            {sortColumn === "factor" && (
+                              <span className="text-[#00D4AA]">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                            )}
+                          </span>
                         </th>
-                        <th className="text-center text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3">
-                          Page
+                        <th
+                          onClick={() => handleSort("counted_m2")}
+                          className="text-right text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white transition-colors select-none"
+                        >
+                          <span className="flex items-center justify-end gap-1">
+                            {t.scan.counted}
+                            {sortColumn === "counted_m2" && (
+                              <span className="text-[#00D4AA]">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                            )}
+                          </span>
+                        </th>
+                        <th
+                          onClick={() => handleSort("page")}
+                          className="text-center text-xs font-medium text-[#64748B] uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white transition-colors select-none"
+                        >
+                          <span className="flex items-center justify-center gap-1">
+                            {t.scan.page}
+                            {sortColumn === "page" && (
+                              <span className="text-[#00D4AA]">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                            )}
+                          </span>
                         </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {result.rooms.map((room, idx) => (
+                      {getSortedRooms().map((room, idx) => (
                         <tr
                           key={idx}
                           onClick={() => setSelectedRoom(room)}
                           className={`hover:bg-white/[0.02] cursor-pointer transition-colors ${
                             selectedRoom === room ? "bg-[#00D4AA]/5" : ""
-                          } ${room.factor < 1 ? "bg-green-500/5" : ""}`}
+                          } ${room.factor < 1 ? "bg-green-500/5" : ""} ${
+                            isRoomAffectedByRevision(room.room_number) ? "bg-amber-500/10" : ""
+                          }`}
                         >
                           <td className="px-4 py-3 text-sm font-mono text-[#00D4AA]">
-                            {room.room_number}
+                            <span className="flex items-center gap-2">
+                              {room.room_number}
+                              {isRoomAffectedByRevision(room.room_number) && (
+                                <span title="Affected by revision cloud" className="text-amber-500">
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                </span>
+                              )}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-sm text-white">
                             {room.room_name}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#94A3B8] capitalize">
+                            {t.common[room.category as keyof typeof t.common] || room.category}
                           </td>
                           <td className="px-4 py-3 text-sm text-white text-right font-mono">
                             {formatNumber(room.area_m2)}
@@ -669,53 +858,53 @@ export default function ScanPage() {
               {/* Audit Panel */}
               <div className="bg-[#1A2942] rounded-xl border border-white/5 p-5">
                 <h3 className="text-sm font-medium text-[#94A3B8] uppercase tracking-wider mb-4">
-                  Audit Trail
+                  {t.scan.auditTrail}
                 </h3>
                 {selectedRoom ? (
                   <div className="space-y-4">
                     <div>
-                      <p className="text-xs text-[#64748B]">Room Number</p>
+                      <p className="text-xs text-[#64748B]">{t.scan.roomNumber}</p>
                       <p className="text-white font-mono">
                         {selectedRoom.room_number}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-[#64748B]">Room Name</p>
+                      <p className="text-xs text-[#64748B]">{t.scan.roomName}</p>
                       <p className="text-white">{selectedRoom.room_name}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-[#64748B]">Category</p>
+                      <p className="text-xs text-[#64748B]">{t.scan.category}</p>
                       <p className="text-white">
-                        {getCategoryDisplayName(selectedRoom.category)}
+                        {t.common[selectedRoom.category as keyof typeof t.common] || selectedRoom.category}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-[#64748B]">Area</p>
+                      <p className="text-xs text-[#64748B]">{t.scan.area}</p>
                       <p className="text-white font-mono">
                         {formatArea(selectedRoom.area_m2)}
                       </p>
                     </div>
                     <hr className="border-white/5" />
                     <div>
-                      <p className="text-xs text-[#64748B] mb-2">Source Text</p>
+                      <p className="text-xs text-[#64748B] mb-2">{t.scan.sourceText}</p>
                       <pre className="text-xs text-[#00D4AA] font-mono bg-[#0F1B2A] p-3 rounded-lg overflow-x-auto">
                         {selectedRoom.source_text}
                       </pre>
                     </div>
                     <div>
-                      <p className="text-xs text-[#64748B]">Extraction Pattern</p>
+                      <p className="text-xs text-[#64748B]">{t.scan.extractionPattern}</p>
                       <code className="text-xs text-[#F59E0B] font-mono">
                         {selectedRoom.extraction_pattern}
                       </code>
                     </div>
                     <div>
-                      <p className="text-xs text-[#64748B]">Page</p>
+                      <p className="text-xs text-[#64748B]">{t.scan.page}</p>
                       <p className="text-white">{selectedRoom.page}</p>
                     </div>
                   </div>
                 ) : (
                   <p className="text-sm text-[#64748B]">
-                    Select a room to view its audit trail
+                    {t.scan.selectRoom}
                   </p>
                 )}
               </div>
@@ -728,7 +917,7 @@ export default function ScanPage() {
               {/* Category Bar Chart */}
               <div className="bg-[#1A2942] rounded-xl border border-white/5 p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">
-                  Area by Category
+                  {t.scan.areaByCategory}
                 </h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -777,7 +966,7 @@ export default function ScanPage() {
               {/* Category Pie Chart */}
               <div className="bg-[#1A2942] rounded-xl border border-white/5 p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">
-                  Distribution
+                  {t.scan.distribution}
                 </h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -828,7 +1017,7 @@ export default function ScanPage() {
               {/* Page Distribution */}
               <div className="bg-[#1A2942] rounded-xl border border-white/5 p-6 lg:col-span-2">
                 <h3 className="text-lg font-semibold text-white mb-4">
-                  Area by Page
+                  {t.scan.areaByPage}
                 </h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
@@ -871,7 +1060,7 @@ export default function ScanPage() {
           {result.warnings.length > 0 && (
             <div className="bg-[#F59E0B]/10 rounded-xl border border-[#F59E0B]/20 p-4">
               <h3 className="text-sm font-medium text-[#F59E0B] mb-2">
-                Warnings
+                {t.scan.warnings}
               </h3>
               <ul className="space-y-1">
                 {result.warnings.map((warning, idx) => (

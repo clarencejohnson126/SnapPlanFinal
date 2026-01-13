@@ -395,34 +395,40 @@ def extract_leiq(lines: List[str], page_idx: int) -> List[ExtractedRoom]:
             # Look for room name
             if i + 1 < len(lines):
                 next_line = lines[i + 1].strip()
-                if next_line and not re.match(r'^(NRF|U:|LH:|B\.|[\d,]+)', next_line):
+                if next_line and not re.match(r'^(NRF|F[=:]|U[=:]|LH[=:]|LRH[=:]|B\.|[\d,]+)', next_line):
                     room_name = next_line
 
             # Look for values
             for j in range(i + 1, min(len(lines), i + 15)):
                 curr = lines[j].strip()
 
-                # NRF: XX,XX m2 on same line
-                nrf_match = re.match(r'^NRF:\s*([\d,]+)\s*m[²2]?$', curr, re.IGNORECASE)
+                # NRF: or NRF= XX,XX m2 on same line
+                nrf_match = re.match(r'^NRF[=:]\s*([\d.,]+)\s*m[²2]?$', curr, re.IGNORECASE)
                 if nrf_match and area is None:
                     area = parse_german_number(nrf_match.group(1))
                     continue
 
+                # F: or F= XX,XX m2 (alternative area format)
+                f_match = re.match(r'^F[=:]\s*([\d.,]+)\s*m[²2]?$', curr, re.IGNORECASE)
+                if f_match and area is None:
+                    area = parse_german_number(f_match.group(1))
+                    continue
+
                 # NRF: split across lines
-                if curr == 'NRF:' and j + 1 < len(lines):
-                    area_match = re.match(r'^([\d,]+)\s*m[²2]?$', lines[j + 1].strip())
+                if curr in ('NRF:', 'NRF=') and j + 1 < len(lines):
+                    area_match = re.match(r'^([\d.,]+)\s*m[²2]?$', lines[j + 1].strip())
                     if area_match and area is None:
                         area = parse_german_number(area_match.group(1))
                         continue
 
-                # U: perimeter
-                u_match = re.match(r'^U:\s*([\d,]+)\s*m$', curr, re.IGNORECASE)
+                # U: or U= perimeter (handles both U: XX,XX m and U= XX.XX m formats)
+                u_match = re.match(r'^U[=:]\s*([\d.,]+)\s*m$', curr, re.IGNORECASE)
                 if u_match:
                     perimeter = parse_german_number(u_match.group(1))
                     continue
 
-                # LH: height
-                lh_match = re.match(r'^LH:\s*([\d,]+)\s*m$', curr, re.IGNORECASE)
+                # LH: or LRH: or LRH= height (lichte Raumhöhe)
+                lh_match = re.match(r'^L(?:R)?H[=:]\s*([\d.,]+)\s*m$', curr, re.IGNORECASE)
                 if lh_match:
                     height = parse_german_number(lh_match.group(1))
                     continue
@@ -538,31 +544,36 @@ def extract_omniturm(lines: List[str], page_idx: int) -> List[ExtractedRoom]:
 # GENERIC FLEXIBLE EXTRACTOR
 # =============================================================================
 
-# Flexible area patterns that match many German blueprint formats
+# Flexible area patterns - STRICT to avoid matching random m² values
+# Only match when clearly labeled as room area
 FLEXIBLE_AREA_PATTERNS = [
-    # Standard German patterns
-    re.compile(r'(?:NRF|NGF|BGF|Fläche|F|Fl|FL|A|Area|GF|WF|NF)\s*[=:]\s*([\d.,]+)\s*m[²2]?', re.IGNORECASE),
-    # Area on its own line with m² suffix
-    re.compile(r'^([\d.,]+)\s*m[²2]$', re.IGNORECASE),
-    # Area with qm suffix (common in German)
-    re.compile(r'([\d.,]+)\s*qm\b', re.IGNORECASE),
-    # Area after colon or equals
-    re.compile(r'[=:]\s*([\d.,]+)\s*m[²2]?$', re.IGNORECASE),
+    # Standard German room area labels (require explicit label prefix)
+    re.compile(r'(?:NRF|NGF|BGF|Fläche|Fl|FL|GF|WF|NF)\s*[=:]\s*([\d.,]+)\s*m[²2]?', re.IGNORECASE),
+    # F: pattern (standalone, not part of other words)
+    re.compile(r'^F\s*[=:]\s*([\d.,]+)\s*m[²2]?$', re.IGNORECASE),
+    # Area with qm suffix after a label
+    re.compile(r'(?:NRF|NGF|Fläche)\s*[=:]\s*([\d.,]+)\s*qm\b', re.IGNORECASE),
 ]
 
-# Flexible room identifier patterns
+# NOTE: We intentionally removed overly broad patterns like:
+# - r'^([\d.,]+)\s*m[²2]$' - matches ANY number + m², creating phantom rooms
+# - r'[=:]\s*([\d.,]+)\s*m[²2]?$' - too broad, catches dimensions/scales
+
+# Flexible room identifier patterns - STRICT to require structured IDs
 FLEXIBLE_ROOM_PATTERNS = [
-    # German style: R2.E5.3.5, B.00.2.002, BT1.EG.001
+    # German style: R2.E5.3.5, B.00.2.002, BT1.EG.001 (require at least 3 segments)
     re.compile(r'^([A-Z]+\d*[\._][A-Z0-9]+[\._][A-Z0-9]+[\._][A-Z0-9]+)$', re.IGNORECASE),
     # Grid style: 33_b6.12
     re.compile(r'^(\d+_[a-z]\d+\.\d+)$'),
-    # Simple numbered rooms: R001, Room-001, Raum 001
-    re.compile(r'^((?:R(?:aum|oom)?[\s\-_]?)?\d{2,4})$', re.IGNORECASE),
-    # Room with floor: EG.001, OG1.002, UG.003
-    re.compile(r'^([A-Z]{2}\d*[\._]\d{3})$', re.IGNORECASE),
-    # Any alphanumeric with dots/dashes that looks like a room ID
-    re.compile(r'^([A-Z0-9]{1,4}[\.\-_][A-Z0-9]+[\.\-_][A-Z0-9]+)$', re.IGNORECASE),
+    # Room with floor prefix: EG.001, OG1.002, UG.003 (German floor notation)
+    re.compile(r'^([EOU]G\d*[\._]\d{3})$', re.IGNORECASE),
+    # Structured room IDs with 2 segments (require letter prefix): R.001, B.002
+    re.compile(r'^([A-Z][\._]\d{3})$', re.IGNORECASE),
 ]
+
+# NOTE: We removed overly broad patterns that would match random text:
+# - Simple numbered "R001" without structure
+# - Generic alphanumeric patterns
 
 
 def extract_generic(lines: List[str], page_idx: int) -> List[ExtractedRoom]:
@@ -669,40 +680,15 @@ def extract_generic(lines: List[str], page_idx: int) -> List[ExtractedRoom]:
                 extraction_pattern="generic",
             ))
 
-    # Fourth pass: for any unused areas, create room entries with generated IDs
-    # (Only if we found very few or no room IDs)
-    if len(rooms) < len(found_areas) / 2:
-        room_counter = 1
-        for area_idx, area_info in enumerate(found_areas):
-            if area_idx in used_areas:
-                continue
-
-            # Look for a name near this area
-            room_name = None
-            for offset in [-1, -2, 1, 2]:
-                j = area_info['line_idx'] + offset
-                if 0 <= j < len(lines):
-                    candidate = lines[j].strip()
-                    if (candidate and
-                        len(candidate) > 2 and
-                        not re.match(r'^[\d,.\s]+$', candidate) and
-                        not re.match(r'^(NRF|NGF|F|U|LH)[\s:=]', candidate, re.IGNORECASE) and
-                        not re.match(r'^[\d.,]+\s*m[²2]?$', candidate)):
-                        room_name = candidate
-                        break
-
-            rooms.append(ExtractedRoom(
-                room_number=f"Room_{page_idx}_{room_counter:03d}",
-                room_name=room_name or "Unknown",
-                area_m2=area_info['area'],
-                counted_m2=area_info['area'],
-                factor=1.0,
-                page=page_idx,
-                source_text=area_info['source_line'],
-                category=categorize_room(room_name or ""),
-                extraction_pattern="generic_area_only",
-            ))
-            room_counter += 1
+    # Fourth pass: DISABLED - Do NOT create phantom rooms from orphan area values
+    # The old approach created fake "Room_PAGE_001" entries for every m² value found,
+    # which resulted in 100+ phantom "rooms" that were actually dimension labels,
+    # scale factors, or other non-room values.
+    #
+    # If we couldn't match area values to proper room IDs, it's better to return
+    # fewer rooms than to pollute results with garbage entries.
+    #
+    # The strict patterns above ensure we only extract legitimate rooms.
 
     return rooms
 

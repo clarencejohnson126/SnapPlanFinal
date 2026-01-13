@@ -30,6 +30,7 @@ openpyxl>=3.1.0  # Excel file generation for Aufmaß export
 
 # LLM interpretation
 openai>=1.0.0  # OpenAI API for summary generation and smart tips
+anthropic>=0.18.0  # Anthropic API for Artifact Studio sketch generation
 
 # Testing
 pytest>=7.4.0

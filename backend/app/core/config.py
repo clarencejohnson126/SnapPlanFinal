@@ -91,6 +91,14 @@ class Settings(BaseSettings):
         """Check if Supabase is properly configured for persistence."""
         return bool(self.supabase_url and self.supabase_service_key)
 
+    # Anthropic Configuration (for Artifact Studio)
+    anthropic_api_key: Optional[str] = None
+
+    @property
+    def anthropic_enabled(self) -> bool:
+        """Check if Anthropic API is configured for artifact generation."""
+        return bool(self.anthropic_api_key)
+
 
 # Global settings instance
 settings = Settings()
