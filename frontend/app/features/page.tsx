@@ -1,9 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Pencil, Calculator, FolderOpen, Sparkles, CheckCircle, Zap } from "lucide-react";
+import { ArrowLeft, FileText, Pencil, Calculator, FolderOpen, Sparkles, CheckCircle, Zap, X } from "lucide-react";
 
 export default function FeaturesPage() {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState("");
+
+  const openLightbox = (src: string) => {
+    setLightboxImage(src);
+    setLightboxOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-[#0F172A]">
       {/* Header */}
@@ -104,8 +113,10 @@ export default function FeaturesPage() {
               <img
                 src="https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Screenshot%202026-01-13%20at%2016.00.09.png"
                 alt="Skizzen Studio - Interaktive Baudetail-Skizze"
-                className="w-full h-auto rounded-lg"
+                className="w-full h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => openLightbox("https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Screenshot%202026-01-13%20at%2016.00.09.png")}
               />
+              <p className="text-center text-[#64748B] text-xs mt-2">Klicken zum Vergrößern</p>
             </div>
             <div className="order-1 md:order-2">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-500/10 text-purple-400 rounded-full text-sm mb-4">
@@ -282,6 +293,27 @@ export default function FeaturesPage() {
           SnapPlan - Deterministische Bauplan-Analyse
         </div>
       </footer>
+
+      {/* Lightbox Modal */}
+      {lightboxOpen && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <X className="w-8 h-8" />
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Vergrößerte Ansicht"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
