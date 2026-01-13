@@ -72,7 +72,7 @@ export default function LandingPage() {
               {t.landing.uploadBlueprint}
             </Link>
             <Link
-              href="#features"
+              href="/features"
               className="px-6 py-3 rounded-lg border border-white/10 text-white hover:border-white/20 transition-colors"
             >
               {t.landing.learnMore}
