@@ -177,9 +177,9 @@ export const translations = {
     // Landing page
     landing: {
       tryNow: "Jetzt testen",
-      heroTitle: "Baudaten extrahieren mit",
-      heroHighlight: "null Halluzination",
-      heroDescription: "Deterministische Extraktion von Raumflächen, Türlisten und Maßen aus deutschen Bauplänen. 100% Nachvollziehbarkeit, vollständiger Audit-Trail.",
+      heroTitle: "Aufmaß in Minuten.",
+      heroHighlight: "Interaktive Skizzen und Details auf Knopfdruck.",
+      heroDescription: "Extrahieren Sie Raumflächen, Türlisten und Maße aus deutschen Bauplänen. Generieren Sie interaktive Baudetail-Skizzen mit KI.",
       uploadBlueprint: "Plan hochladen",
       learnMore: "Mehr erfahren",
       featuresTitle: "Entwickelt für deutsche Baupläne",
