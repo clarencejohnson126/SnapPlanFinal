@@ -100,14 +100,12 @@ export default function FeaturesPage() {
 
           {/* Feature 2: Skizzen Studio */}
           <div className="grid md:grid-cols-2 gap-8 items-center">
-            <div className="order-2 md:order-1 bg-[#1A2942] rounded-2xl p-8 border border-white/5">
-              <div className="aspect-video bg-[#0F172A] rounded-lg flex items-center justify-center">
-                <div className="text-center">
-                  <Sparkles className="w-12 h-12 text-[#00D4AA] mx-auto mb-3" />
-                  <p className="text-[#94A3B8] text-sm">Interaktive SVG-Skizze</p>
-                  <p className="text-white font-medium">Trockenbau-Anschluss</p>
-                </div>
-              </div>
+            <div className="order-2 md:order-1 bg-[#1A2942] rounded-2xl p-2 border border-white/5 overflow-hidden">
+              <img
+                src="https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Screenshot%202026-01-13%20at%2016.00.09.png"
+                alt="Skizzen Studio - Interaktive Baudetail-Skizze"
+                className="w-full h-auto rounded-lg"
+              />
             </div>
             <div className="order-1 md:order-2">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-500/10 text-purple-400 rounded-full text-sm mb-4">
