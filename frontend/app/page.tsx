@@ -28,7 +28,7 @@ export default function LandingPage() {
             <img
               src="https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Adobe%20Express%20-%20file.png"
               alt="SnapPlan Logo"
-              className="w-10 h-10 rounded-xl"
+              className="w-[46px] h-[46px] rounded-xl"
             />
             <span className="text-xl font-bold text-white">SnapPlan</span>
           </div>
