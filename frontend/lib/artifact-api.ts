@@ -74,7 +74,7 @@ export interface TemplateListResponse {
 // =============================================================================
 
 /**
- * Generate a new artifact using Claude AI.
+ * Generate a new artifact.
  */
 export async function generateArtifact(request: GenerateRequest): Promise<GenerateResponse> {
   const response = await fetch(`${API_BASE}/api/v1/artifacts/generate`, {

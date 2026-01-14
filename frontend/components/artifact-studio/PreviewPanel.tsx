@@ -241,8 +241,8 @@ export function PreviewPanel({
             </div>
             <p className="mt-6 text-[#94A3B8] text-center">
               {language === "de"
-                ? "Generiere Skizze mit Claude AI..."
-                : "Generating sketch with Claude AI..."}
+                ? "Generiere Skizze..."
+                : "Generating sketch..."}
             </p>
             <p className="mt-2 text-[#64748B] text-sm text-center">
               {language === "de"

@@ -128,7 +128,7 @@ export default function FeaturesPage() {
               </h2>
               <p className="text-[#94A3B8] mb-6">
                 Beschreiben Sie das gewünschte Baudetail in natürlicher Sprache und erhalten Sie
-                eine interaktive, technisch korrekte Skizze – generiert von Claude AI.
+                eine interaktive, technisch korrekte Skizze – automatisch generiert.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3 text-[#94A3B8]">
