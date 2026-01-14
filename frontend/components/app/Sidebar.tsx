@@ -97,11 +97,11 @@ export function Sidebar() {
       {/* Logo */}
       <div className="h-16 flex items-center px-6 border-b border-white/5">
         <Link href="/app" className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#00D4AA] rounded-lg flex items-center justify-center">
-            <svg className="w-5 h-5 text-[#0F1B2A]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-            </svg>
-          </div>
+          <img
+            src="https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Adobe%20Express%20-%20file.png"
+            alt="SnapPlan Logo"
+            className="w-8 h-8 rounded-lg"
+          />
           <span className="text-lg font-semibold text-white">SnapPlan</span>
         </Link>
       </div>
