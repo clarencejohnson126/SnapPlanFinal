@@ -23,20 +23,20 @@ export default function LandingPage() {
 
       {/* Header */}
       <header className="relative z-10 border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
             <img
               src="https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Adobe%20Express%20-%20file.png"
               alt="SnapPlan Logo"
-              className="w-[46px] h-[46px] rounded-xl"
+              className="w-10 h-10 sm:w-[46px] sm:h-[46px] rounded-xl"
             />
-            <span className="text-xl font-bold text-white">SnapPlan</span>
+            <span className="hidden sm:inline text-xl font-bold text-white">SnapPlan</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <LanguageToggle />
             <Link
               href="/app/scan"
-              className="px-4 py-2 rounded-lg bg-[#00D4AA] text-[#0F1B2A] font-semibold hover:bg-[#00D4AA]/90 transition-colors"
+              className="px-3 sm:px-4 py-2 rounded-lg bg-[#00D4AA] text-[#0F1B2A] font-semibold text-sm sm:text-base hover:bg-[#00D4AA]/90 transition-colors"
             >
               {t.landing.tryNow}
             </Link>
