@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Script from "next/script";
 import { useLanguage } from "@/lib/i18n";
 import { LanguageToggle } from "@/components/app/LanguageToggle";
 
@@ -67,6 +68,15 @@ export default function LandingPage() {
             >
               {t.landing.learnMore}
             </Link>
+          </div>
+          <div className="mt-6">
+            <Script src="https://gumroad.com/js/gumroad.js" strategy="lazyOnload" />
+            <a
+              className="gumroad-button"
+              href="https://rebelzai.gumroad.com/l/KI-Nachunternehmer"
+            >
+              Hol dir dein E-Book auf
+            </a>
           </div>
         </div>
 
