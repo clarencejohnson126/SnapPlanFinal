@@ -152,6 +152,7 @@ export const translations = {
     nav: {
       dashboard: "Dashboard",
       quickScan: "Quick Scan",
+      doorExtraction: "Door Extraction",
       artifactStudio: "Artifact Studio",
       tradeCalculator: "Trade Calculator",
       projects: "Projects",
@@ -326,6 +327,7 @@ export const translations = {
     nav: {
       dashboard: "Dashboard",
       quickScan: "Schnellscan",
+      doorExtraction: "Türen-Extraktion",
       artifactStudio: "Skizzen-Studio",
       tradeCalculator: "Gewerke-Rechner",
       projects: "Projekte",

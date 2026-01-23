@@ -168,10 +168,17 @@ async def health_check():
 
     Returns list of available trade modules.
     """
+    settings = get_settings()
+    available = ["doors", "flooring", "drywall"]
+
+    # Add door_geometry if enabled
+    if settings.door_geometry_extraction_enabled:
+        available.append("door_geometry")
+
     return GewerkHealthResponse(
         status="ok",
         service="gewerke",
-        available_gewerke=["doors", "flooring", "drywall"],
+        available_gewerke=available,
     )
 
 
@@ -1820,6 +1827,240 @@ async def extract_room_areas_nrf(
             page_count=result.page_count,
             missing=missing,
             warnings=result.warnings,
+        )
+
+    finally:
+        # Clean up temp files
+        if temp_path.exists():
+            temp_path.unlink()
+        if Path(temp_dir).exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# =============================================================================
+# Door Geometry Extraction (Label + Vector Detection)
+# =============================================================================
+
+
+class DoorGeometryLabelResponse(BaseModel):
+    """Response model for a detected door label."""
+    label_text: str
+    raw_text: str
+    page_number: int
+    bbox: List[float]  # [x0, y0, x1, y1]
+    confidence: float
+    pattern_type: str
+    width_m: Optional[float] = None
+    height_m: Optional[float] = None
+    door_type: Optional[str] = None
+    fire_rating: Optional[str] = None
+
+
+class DoorGeometryShapeResponse(BaseModel):
+    """Response model for a detected door geometry."""
+    geometry_id: str
+    page_number: int
+    center: List[float]  # [x, y]
+    width_px: float
+    height_px: Optional[float] = None
+    orientation_deg: float
+    opening_type: str  # "arc", "rectangle", "gap"
+    bbox: List[float]  # [x0, y0, x1, y1]
+    confidence: float
+    source_type: str
+
+
+class DoorExtractionItemResponse(BaseModel):
+    """Response model for a single extracted door."""
+    extraction_id: str
+    page_number: int
+    label: Optional[DoorGeometryLabelResponse] = None
+    geometry: Optional[DoorGeometryShapeResponse] = None
+    width_m: Optional[float] = None
+    height_m: Optional[float] = None
+    door_type: Optional[str] = None
+    door_number: Optional[str] = None
+    fire_rating: Optional[str] = None
+    category: Optional[str] = None
+    confidence: float
+    extraction_method: str
+    scale_context_id: Optional[str] = None
+    assumptions: List[str]
+    warnings: List[str]
+
+
+class DoorExtractionSummaryResponse(BaseModel):
+    """Summary statistics for door geometry extraction."""
+    total_doors: int
+    by_type: Dict[str, int]
+    by_fire_rating: Dict[str, int]
+    by_width: Dict[str, int]
+    avg_width_m: Optional[float] = None
+
+
+class DoorGeometryExtractionResponse(BaseModel):
+    """Response for door geometry extraction endpoint."""
+    result_id: str
+    source_file: str
+    page_count: int
+    processed_pages: List[int]
+    total_doors: int
+    doors: List[DoorExtractionItemResponse]
+    summary: DoorExtractionSummaryResponse
+    extraction_time_ms: int
+    warnings: List[str]
+    errors: List[str]
+
+
+@router.post("/doors/geometry", response_model=DoorGeometryExtractionResponse)
+async def extract_door_geometry(
+    file: UploadFile = File(..., description="Floor plan PDF file"),
+    page_number: Optional[int] = Query(None, ge=1, description="Specific page to process (1-indexed). Leave empty for all pages."),
+    scale: Optional[int] = Query(None, gt=0, description="Scale factor (e.g., 100 for 1:100). If not provided, dimensions will be in pixels only."),
+    search_radius_px: float = Query(150, ge=50, le=500, description="Max distance between label and geometry for association"),
+    min_confidence: float = Query(0.6, ge=0, le=1, description="Minimum confidence threshold for door detection"),
+    dpi: int = Query(150, ge=72, le=300, description="DPI for PDF rendering and coordinate scaling"),
+):
+    """
+    Extract doors from floor plan using label + geometry detection.
+
+    **4-stage pipeline:**
+    1. **Detect door labels** from text (WD, DD, dimensions, fire ratings)
+    2. **Detect door geometries** (arcs, rectangles, wall gaps)
+    3. **Associate labels** with nearest geometries
+    4. **Extract dimensions** and attributes
+
+    **What it detects:**
+    - **Arc-based doors**: Quarter-circle swing indicators (most reliable)
+    - **Rectangle doors**: Parallel line pairs indicating door frame
+    - **Door labels**: Text patterns like "WD", "T 30-RS", "0,90 x 2,10"
+    - **Fire ratings**: T30, T90, DSS classifications
+
+    **Returns:**
+    - Structured door list with full traceability
+    - Every door includes: page, bbox, confidence, source method
+    - Summary statistics: counts by type, fire rating, width
+
+    **Scale parameter:**
+    - Required for real-world dimensions (meters)
+    - Without scale, dimensions are in pixels only
+    - Example: scale=100 for 1:100 drawings
+
+    **Use cases:**
+    - Door schedules without tables (visual floor plans)
+    - Fire-rated door audits
+    - Door count verification
+    """
+    from ..services.door_geometry_extraction import extract_doors_from_pdf
+
+    settings = get_settings()
+
+    # Check if feature is enabled
+    if not settings.door_geometry_extraction_enabled:
+        raise HTTPException(
+            status_code=501,
+            detail="Door geometry extraction is disabled. Enable SNAPGRID_ENABLE_DOOR_GEOMETRY_EXTRACTION in settings."
+        )
+
+    # Validate file type
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"File must be a PDF, got: {file.filename}"
+        )
+
+    # Save uploaded file to temp location
+    temp_dir = tempfile.mkdtemp()
+    temp_path = Path(temp_dir) / file.filename
+
+    try:
+        with open(temp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Run door geometry extraction
+        result = extract_doors_from_pdf(
+            pdf_path=temp_path,
+            page_number=page_number,
+            scale_factor=scale,
+            search_radius_px=search_radius_px,
+            min_confidence=min_confidence,
+            dpi=dpi,
+        )
+
+        # Convert to response format
+        doors = []
+        for door in result.doors:
+            # Convert label
+            label_response = None
+            if door.label:
+                label_response = DoorGeometryLabelResponse(
+                    label_text=door.label.label_text,
+                    raw_text=door.label.raw_text,
+                    page_number=door.label.page_number,
+                    bbox=list(door.label.bbox),
+                    confidence=door.label.confidence,
+                    pattern_type=door.label.pattern_type,
+                    width_m=door.label.width_m,
+                    height_m=door.label.height_m,
+                    door_type=door.label.door_type,
+                    fire_rating=door.label.fire_rating,
+                )
+
+            # Convert geometry
+            geometry_response = None
+            if door.geometry:
+                geometry_response = DoorGeometryShapeResponse(
+                    geometry_id=door.geometry.geometry_id,
+                    page_number=door.geometry.page_number,
+                    center=list(door.geometry.center),
+                    width_px=door.geometry.width_px,
+                    height_px=door.geometry.height_px,
+                    orientation_deg=door.geometry.orientation_deg,
+                    opening_type=door.geometry.opening_type,
+                    bbox=list(door.geometry.bbox),
+                    confidence=door.geometry.confidence,
+                    source_type=door.geometry.source_type,
+                )
+
+            # Build door item
+            doors.append(DoorExtractionItemResponse(
+                extraction_id=door.extraction_id,
+                page_number=door.page_number,
+                label=label_response,
+                geometry=geometry_response,
+                width_m=door.width_m,
+                height_m=door.height_m,
+                door_type=door.door_type,
+                door_number=door.door_number,
+                fire_rating=door.fire_rating,
+                category=door.category,
+                confidence=door.confidence,
+                extraction_method=door.extraction_method,
+                scale_context_id=door.scale_context_id,
+                assumptions=door.assumptions,
+                warnings=door.warnings,
+            ))
+
+        # Build summary
+        summary = DoorExtractionSummaryResponse(
+            total_doors=result.total_doors,
+            by_type=result.by_type,
+            by_fire_rating=result.by_fire_rating,
+            by_width=result.by_width,
+            avg_width_m=result.avg_width_m,
+        )
+
+        return DoorGeometryExtractionResponse(
+            result_id=result.result_id,
+            source_file=result.source_file,
+            page_count=result.page_count,
+            processed_pages=result.processed_pages,
+            total_doors=result.total_doors,
+            doors=doors,
+            summary=summary,
+            extraction_time_ms=result.extraction_time_ms,
+            warnings=result.warnings,
+            errors=result.errors,
         )
 
     finally:

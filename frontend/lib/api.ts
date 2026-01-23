@@ -351,3 +351,101 @@ export function getStyleDisplayName(style: string, language: string = 'de'): str
 
   return names[language]?.[style] || names['en']?.[style] || style;
 }
+
+// ==================== Door Extraction API ====================
+
+export interface DoorLabel {
+  label_text: string;
+  raw_text: string;
+  bbox: [number, number, number, number];
+  page_number: number;
+  confidence: number;
+  pattern_type: string;
+  width_m?: number;
+  height_m?: number;
+  door_type?: string;
+  fire_rating?: string;
+}
+
+export interface DoorGeometry {
+  geometry_id: string;
+  page_number: number;
+  center: [number, number];
+  width_px: number;
+  height_px?: number;
+  orientation_deg: number;
+  opening_type: string;
+  bbox: [number, number, number, number];
+  confidence: number;
+  source_type: string;
+}
+
+export interface ExtractedDoor {
+  extraction_id: string;
+  page_number: number;
+  label?: DoorLabel;
+  geometry?: DoorGeometry;
+  width_m?: number;
+  height_m?: number;
+  door_type?: string;
+  door_number?: string;
+  fire_rating?: string;
+  category?: string;
+  confidence: number;
+  extraction_method: string;
+  assumptions: string[];
+  warnings: string[];
+}
+
+export interface DoorExtractionResult {
+  result_id: string;
+  source_file: string;
+  page_count: number;
+  processed_pages: number[];
+  total_doors: number;
+  doors: ExtractedDoor[];
+  summary: {
+    total_doors: number;
+    by_type: Record<string, number>;
+    by_fire_rating: Record<string, number>;
+    by_width: Record<string, number>;
+    avg_width_m?: number;
+  };
+  extraction_time_ms: number;
+  warnings: string[];
+  errors: string[];
+}
+
+// Extract doors from PDF
+export async function extractDoors(
+  file: File,
+  pageNumber?: number,
+  scale?: number,
+  searchRadiusPx: number = 150,
+  minConfidence: number = 0.6,
+  dpi: number = 150
+): Promise<DoorExtractionResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const params = new URLSearchParams();
+  if (pageNumber) params.append('page_number', pageNumber.toString());
+  if (scale) params.append('scale', scale.toString());
+  params.append('search_radius_px', searchRadiusPx.toString());
+  params.append('min_confidence', minConfidence.toString());
+  params.append('dpi', dpi.toString());
+
+  const url = `${API_BASE}/api/v1/gewerke/doors/geometry?${params.toString()}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Door extraction failed');
+  }
+
+  return response.json();
+}

@@ -99,6 +99,19 @@ class Settings(BaseSettings):
         """Check if Anthropic API is configured for artifact generation."""
         return bool(self.anthropic_api_key)
 
+    # Door Geometry Extraction Configuration
+    enable_door_geometry_extraction: bool = True
+    door_extraction_search_radius_px: float = 150.0
+    door_extraction_min_confidence: float = 0.6
+
+    # Future: CV fallback configuration
+    enable_door_cv_fallback: bool = False
+
+    @property
+    def door_geometry_extraction_enabled(self) -> bool:
+        """Check if door geometry extraction is enabled."""
+        return self.enable_door_geometry_extraction
+
 
 # Global settings instance
 settings = Settings()
