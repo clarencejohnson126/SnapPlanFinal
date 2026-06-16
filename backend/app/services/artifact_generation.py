@@ -328,7 +328,7 @@ def generate_artifact(
     for attempt in range(retry_count + 1):
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-5-20250929",
+                model="claude-opus-4-8",
                 max_tokens=16000,  # Large buffer to prevent truncation
                 system=system_prompt,
                 messages=[
@@ -336,7 +336,7 @@ def generate_artifact(
                 ],
             )
 
-            content = response.content[0].text
+            content = next((b.text for b in response.content if b.type == "text"), "")
             tokens_used = response.usage.input_tokens + response.usage.output_tokens
 
             # Parse JSON response
@@ -396,7 +396,7 @@ def generate_artifact(
                         success=True,
                         artifact=artifact,
                         tokens_used=tokens_used,
-                        model="claude-sonnet-4-5-20250929",
+                        model="claude-opus-4-8",
                     )
 
                 # Handle legacy types
@@ -432,7 +432,7 @@ def generate_artifact(
                     success=True,
                     artifact=artifact,
                     tokens_used=tokens_used,
-                    model="claude-sonnet-4-5-20250929",
+                    model="claude-opus-4-8",
                 )
 
             except (json.JSONDecodeError, ValueError) as e:
@@ -446,7 +446,7 @@ def generate_artifact(
                     artifact=None,
                     error=f"Invalid response format: {str(e)}",
                     tokens_used=tokens_used,
-                    model="claude-sonnet-4-5-20250929",
+                    model="claude-opus-4-8",
                 )
 
         except Exception as e:

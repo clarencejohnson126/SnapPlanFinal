@@ -21,8 +21,8 @@ python-multipart>=0.0.6  # For file uploads
 supabase>=2.0.0
 
 # Computer Vision
-opencv-python>=4.8.0  # Image processing
-ultralytics>=8.0.0    # YOLO object detection (optional - local CV)
+opencv-python-headless>=4.8.0  # Image processing (headless: no libGL needed on servers)
+# ultralytics>=8.0.0   # YOLO object detection (optional local CV) — disabled for lightweight server deploy; code degrades gracefully
 httpx>=0.25.0         # HTTP client for Roboflow API
 
 # Excel export
