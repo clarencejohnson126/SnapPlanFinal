@@ -238,6 +238,85 @@ def is_outdoor_room(room_name: str) -> bool:
     return categorize_room(room_name) == RoomCategory.OUTDOOR
 
 
+# Flat (keyword, category) list for coordinate-based name matching.
+_CATEGORY_KEYWORDS: List[Tuple[str, RoomCategory]] = [
+    (kw, cat) for cat, kws in ROOM_CATEGORIES.items() for kw in kws
+]
+
+
+def _word_center(w) -> Tuple[float, float]:
+    """Center of a PyMuPDF word tuple (x0, y0, x1, y1, text, ...)."""
+    return ((w[0] + w[2]) / 2.0, (w[1] + w[3]) / 2.0)
+
+
+def assign_names_by_position(page, page_rooms: List["ExtractedRoom"], max_dist: Optional[float] = None) -> int:
+    """Deterministically fill MISSING room names using word coordinates.
+
+    Some plans (e.g. the LeiQ "F= ... m²" overview sheets) place the room-name
+    label inside the room polygon, spatially separated from the dimension block
+    (number / U= / F= / LRH=). The line-adjacency heuristic in the per-style
+    extractors then leaves room_name == "Unknown" and every room falls into the
+    OTHER category, producing an uninformative report.
+
+    This pass anchors each unnamed room on its room-number word position and
+    assigns the nearest room-type label (a word matching a ROOM_CATEGORIES
+    keyword) within `max_dist` points, then re-derives the category. It ONLY
+    fills gaps — names found via text adjacency are never overridden — so
+    recognized plans (NRF:/F:/NGF:) are unaffected. Returns rooms newly named.
+    """
+    try:
+        words = page.get_text("words")
+    except Exception:
+        return 0
+    if not words:
+        return 0
+
+    # Scale the search radius to the page so it generalizes across plan sizes
+    # (a label sits within its own room stamp; ~7.5% of the short edge keeps the
+    # match local and avoids grabbing a neighbouring room's label).
+    if max_dist is None:
+        max_dist = min(page.rect.width, page.rect.height) * 0.075
+
+    # Candidate name labels: words containing a known room-type keyword.
+    candidates: List[Tuple[float, float, str, RoomCategory]] = []
+    for w in words:
+        low = w[4].lower()
+        for kw, cat in _CATEGORY_KEYWORDS:
+            if kw in low:
+                cx, cy = _word_center(w)
+                candidates.append((cx, cy, w[4], cat))
+                break
+    if not candidates:
+        return 0
+
+    # First-seen position for each exact word text (room-number anchor).
+    pos_by_text: Dict[str, Any] = {}
+    for w in words:
+        pos_by_text.setdefault(w[4], w)
+
+    assigned = 0
+    for room in page_rooms:
+        if room.room_name and room.room_name != "Unknown":
+            continue
+        anchor = pos_by_text.get(room.room_number)
+        if anchor is None:
+            continue
+        ax, ay = _word_center(anchor)
+        best = None
+        best_d = max_dist
+        for (cx, cy, label, cat) in candidates:
+            d = ((cx - ax) ** 2 + (cy - ay) ** 2) ** 0.5
+            if d < best_d:
+                best_d = d
+                best = (label, cat)
+        if best:
+            room.room_name = best[0]
+            room.category = best[1]
+            room.extraction_pattern = (room.extraction_pattern or "") + "+spatial_name"
+            assigned += 1
+    return assigned
+
+
 # =============================================================================
 # STYLE DETECTION
 # =============================================================================
@@ -757,7 +836,6 @@ def extract_room_areas(
         lines = text.split('\n')
 
         page_rooms = extract_fn(lines, page_idx)
-        rooms.extend(page_rooms)
 
         if not page_rooms:
             # Try other extractors as fallback (known patterns first)
@@ -769,7 +847,7 @@ def extract_room_areas(
                 if alt_fn != extract_fn:
                     alt_rooms = alt_fn(lines, page_idx)
                     if alt_rooms:
-                        rooms.extend(alt_rooms)
+                        page_rooms = alt_rooms
                         warnings.append(f"Page {page_idx}: Used {alt_style.value} pattern as fallback")
                         break
 
@@ -777,8 +855,20 @@ def extract_room_areas(
             if not page_rooms and extract_fn != extract_generic:
                 generic_rooms = extract_generic(lines, page_idx)
                 if generic_rooms:
-                    rooms.extend(generic_rooms)
+                    page_rooms = generic_rooms
                     warnings.append(f"Page {page_idx}: Used generic flexible extraction")
+
+        # Fill MISSING room names from on-plan label positions (deterministic,
+        # gap-only — never overrides names found via text adjacency).
+        if page_rooms:
+            try:
+                named = assign_names_by_position(page, page_rooms)
+                if named:
+                    warnings.append(f"Page {page_idx}: {named} Raumnamen über Label-Position zugeordnet")
+            except Exception as e:
+                warnings.append(f"Page {page_idx}: Positions-Namenszuordnung übersprungen ({e})")
+
+        rooms.extend(page_rooms)
 
     page_count = len(doc)
     doc.close()
