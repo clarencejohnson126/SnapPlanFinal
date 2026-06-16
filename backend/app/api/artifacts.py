@@ -56,6 +56,10 @@ class GenerateRequest(BaseModel):
         None,
         description="Optional context fields for more specific generation"
     )
+    render_mode: Optional[str] = Field(
+        "interactive",
+        description="Output mode: 'interactive' (2D layered sketch) or 'cad3d' (Three.js 3D model)"
+    )
 
 
 class ArtifactResponse(BaseModel):
@@ -179,6 +183,7 @@ def generate_artifact_endpoint(request: GenerateRequest):
         trade_preset=request.trade_preset,
         context=context_dict,
         retry_count=1,
+        cad3d=(request.render_mode == "cad3d"),
     )
 
     if not result.success:
@@ -340,6 +345,7 @@ def create_version(artifact_id: str, request: GenerateRequest):
         trade_preset=request.trade_preset,
         context=context_dict,
         retry_count=1,
+        cad3d=(request.render_mode == "cad3d"),
     )
 
     if not result.success:

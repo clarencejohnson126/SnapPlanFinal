@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Download, Code2, Check, Image, FileText, History, Link2 } from "lucide-react";
+import { Copy, Download, Code2, Check, Image, FileText, History, Link2, Maximize2, X } from "lucide-react";
 import { ArtifactRenderer } from "./ArtifactRenderer";
 import { useLanguage } from "@/lib/i18n";
 import type { Artifact } from "@/lib/artifact-api";
@@ -23,6 +23,7 @@ export function PreviewPanel({
   const [showCode, setShowCode] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [urlCopySuccess, setUrlCopySuccess] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const handleCopyJson = async () => {
     if (!artifact) return;
@@ -161,6 +162,15 @@ export function PreviewPanel({
 
           {artifact && (
             <>
+              {/* Enlarge / Fullscreen */}
+              <button
+                onClick={() => setIsFullscreen(true)}
+                className="p-2 rounded-lg bg-white/5 text-[#94A3B8] hover:text-white hover:bg-white/10 transition-colors"
+                title={language === "de" ? "Vergrößern" : "Enlarge"}
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+
               {/* Copy URL */}
               <button
                 onClick={handleCopyUrl}
@@ -314,7 +324,13 @@ export function PreviewPanel({
               </div>
             ) : (
               /* Preview */
-              <div className="min-h-[300px] max-h-[500px] overflow-auto rounded-lg border border-white/5">
+              <div
+                className={
+                  artifact.type === "cad3d"
+                    ? "h-[60vh] min-h-[480px] overflow-hidden rounded-lg border border-white/5"
+                    : "min-h-[300px] max-h-[600px] overflow-auto rounded-lg border border-white/5"
+                }
+              >
                 <ArtifactRenderer
                   type={artifact.type}
                   code={artifact.code}
@@ -363,6 +379,30 @@ export function PreviewPanel({
           </div>
         )}
       </div>
+
+      {/* Fullscreen / enlarge overlay */}
+      {isFullscreen && artifact && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col p-4 sm:p-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-white font-semibold truncate pr-4">{artifact.title}</h3>
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="p-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors shrink-0"
+              title={language === "de" ? "Schließen" : "Close"}
+              aria-label={language === "de" ? "Schließen" : "Close"}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 rounded-xl overflow-hidden bg-white">
+            <ArtifactRenderer
+              type={artifact.type}
+              code={artifact.code}
+              title={artifact.title}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

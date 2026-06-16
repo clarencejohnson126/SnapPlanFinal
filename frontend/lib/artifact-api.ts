@@ -11,7 +11,9 @@ const API_BASE = process.env.NEXT_PUBLIC_SNAPGRID_API_URL || 'http://localhost:8
 // Types
 // =============================================================================
 
-export type ArtifactType = 'interactive' | 'svg' | 'mermaid' | 'html';
+export type ArtifactType = 'interactive' | 'svg' | 'mermaid' | 'html' | 'cad3d';
+
+export type RenderMode = 'interactive' | 'cad3d';
 
 export interface ArtifactContext {
   project?: string;
@@ -25,6 +27,7 @@ export interface GenerateRequest {
   prompt: string;
   trade_preset?: string;
   context?: ArtifactContext;
+  render_mode?: RenderMode;
 }
 
 export interface Artifact {

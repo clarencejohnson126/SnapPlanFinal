@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Wand2, ChevronDown, Sparkles, Zap } from "lucide-react";
+import { Loader2, Wand2, ChevronDown, Sparkles, Zap, Box, Layers } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
-import type { ArtifactContext, PromptTemplate } from "@/lib/artifact-api";
+import type { ArtifactContext, PromptTemplate, RenderMode } from "@/lib/artifact-api";
 import { getTemplates } from "@/lib/artifact-api";
 
 const TRADE_PRESETS = [
@@ -15,7 +15,7 @@ const TRADE_PRESETS = [
 ];
 
 interface PromptPanelProps {
-  onGenerate: (prompt: string, trade?: string, context?: ArtifactContext) => void;
+  onGenerate: (prompt: string, trade?: string, context?: ArtifactContext, mode?: RenderMode) => void;
   isGenerating: boolean;
 }
 
@@ -24,6 +24,7 @@ export function PromptPanel({ onGenerate, isGenerating }: PromptPanelProps) {
   const [prompt, setPrompt] = useState("");
   const [trade, setTrade] = useState<string | undefined>();
   const [context, setContext] = useState<ArtifactContext>({});
+  const [mode, setMode] = useState<RenderMode>("cad3d");
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [showContext, setShowContext] = useState(false);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
@@ -44,7 +45,7 @@ export function PromptPanel({ onGenerate, isGenerating }: PromptPanelProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
-    onGenerate(prompt, trade, context);
+    onGenerate(prompt, trade, context, mode);
   };
 
   const applyTemplate = (template: PromptTemplate) => {
@@ -214,6 +215,41 @@ export function PromptPanel({ onGenerate, isGenerating }: PromptPanelProps) {
               />
             </div>
           )}
+        </div>
+
+        {/* Render mode toggle */}
+        <div>
+          <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">
+            {language === "de" ? "Darstellung" : "Render mode"}
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setMode("cad3d")}
+              disabled={isGenerating}
+              className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50 ${
+                mode === "cad3d"
+                  ? "bg-[#00D4AA]/15 text-[#00D4AA] border-[#00D4AA]/40"
+                  : "bg-[#0F1B2A] text-[#94A3B8] border-white/10 hover:text-white hover:border-white/20"
+              }`}
+            >
+              <Box className="w-4 h-4" />
+              {language === "de" ? "3D-CAD" : "3D CAD"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("interactive")}
+              disabled={isGenerating}
+              className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50 ${
+                mode === "interactive"
+                  ? "bg-[#00D4AA]/15 text-[#00D4AA] border-[#00D4AA]/40"
+                  : "bg-[#0F1B2A] text-[#94A3B8] border-white/10 hover:text-white hover:border-white/20"
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              {language === "de" ? "2D-Skizze" : "2D sketch"}
+            </button>
+          </div>
         </div>
 
         {/* Submit Button */}

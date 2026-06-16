@@ -8,6 +8,7 @@ import {
   generateArtifact,
   type Artifact,
   type ArtifactContext,
+  type RenderMode,
 } from "@/lib/artifact-api";
 import { useLanguage } from "@/lib/i18n";
 
@@ -19,7 +20,12 @@ export default function ArtifactStudioPage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const handleGenerate = useCallback(
-    async (prompt: string, trade?: string, context?: ArtifactContext) => {
+    async (
+      prompt: string,
+      trade?: string,
+      context?: ArtifactContext,
+      mode: RenderMode = "cad3d"
+    ) => {
       setIsGenerating(true);
       setError(null);
 
@@ -28,6 +34,7 @@ export default function ArtifactStudioPage() {
           prompt,
           trade_preset: trade,
           context,
+          render_mode: mode,
         });
 
         if (response.success && response.artifact) {

@@ -27,6 +27,7 @@ class ArtifactType(str, Enum):
     SVG = "svg"
     MERMAID = "mermaid"
     HTML = "html"
+    CAD3D = "cad3d"  # Self-contained Three.js 3D model (rendered in scripts-enabled iframe)
 
 
 @dataclass
@@ -263,12 +264,44 @@ def sanitize_html(html: str) -> str:
     return html
 
 
+# System prompt for 3D CAD generation (self-contained Three.js scene)
+CAD3D_SYSTEM_PROMPT = """You generate a 3D CAD model of a German construction detail (Bauteil) as a SINGLE self-contained HTML document using Three.js. The user describes a building component; you produce an orbitable 3D render.
+
+RESPOND WITH VALID JSON ONLY — NO MARKDOWN, NO COMMENTS. Structure:
+{
+  "title": "kurzer deutscher Titel",
+  "type": "cad3d",
+  "summary": "1-2 Sätze, was das Modell zeigt (deutsch)",
+  "bullet_points": ["3-6 fachliche Stichpunkte: Schichten, Normen, typische Fehler (deutsch)"],
+  "code": "<!DOCTYPE html> ... </html>"
+}
+
+The "code" value MUST be a complete, self-contained HTML document that:
+- Loads Three.js r128 and OrbitControls from CDN with EXACTLY these global (non-module) scripts:
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+- Has a full-viewport <canvas>/renderer (width 100vw, height 100vh, margin 0, overflow hidden), with a window resize handler that updates camera.aspect and renderer size.
+- Sets up: a PerspectiveCamera positioned for a good 3/4 view; THREE.OrbitControls(camera, renderer.domElement) with enableDamping=true (call controls.update() in the animation loop) so the user can rotate, zoom and pan; a neutral light background (e.g. 0xf3f4f6); ambient + 1-2 directional lights with shadows for depth; an optional subtle ground grid (THREE.GridHelper).
+- Builds the construction detail as layered, color-coded solids from primitive geometries (BoxGeometry, CylinderGeometry, etc.) at REALISTIC relative proportions in millimetres-as-units. Distinct MeshStandardMaterial colors per layer/material (e.g. Tragwerk dark blue, Gipskarton light, Dämmung yellow/green, Estrich grey, Abdichtung dark, Profile metallic). Group related meshes with THREE.Group and name them.
+- Includes a small fixed HTML legend overlay (top-left, semi-transparent white card) listing each colored layer with its German name, and a one-line hint "Ziehen: drehen · Scrollen: zoomen".
+- Runs an animation loop with requestAnimationFrame; gentle optional auto-rotate that stops on user interaction is a nice touch but keep controls responsive.
+- Is robust: if WebGL or the CDN fails, catch errors and show a centered fallback message div.
+
+CONSTRAINTS:
+- Output ONE HTML document only in "code"; no external files besides the two CDN scripts above.
+- Use only THREE.* primitives and the global THREE.OrbitControls (NOT ES modules / importmap).
+- Keep it geometrically faithful and clean — this is a technical CAD render for construction professionals, not a toy. Label-quality matters: proportions, layering order and colors should read like a real Bauteil section extruded into 3D.
+- Deutsche Beschriftungen im Legend-Overlay.
+"""
+
+
 def generate_artifact(
     prompt: str,
     trade_preset: Optional[str] = None,
     context: Optional[Dict[str, str]] = None,
     retry_count: int = 2,
     interactive_mode: bool = True,  # Default to interactive mode
+    cad3d: bool = False,  # If True, generate a self-contained Three.js 3D model
 ) -> GenerationResult:
     """
     Generate an artifact using Claude.
@@ -322,7 +355,12 @@ def generate_artifact(
             full_prompt = f"[Kontext: {', '.join(context_parts)}]\n\n{full_prompt}"
 
     # Choose system prompt based on mode
-    system_prompt = INTERACTIVE_SYSTEM_PROMPT if interactive_mode else SIMPLE_SYSTEM_PROMPT
+    if cad3d:
+        system_prompt = CAD3D_SYSTEM_PROMPT
+    elif interactive_mode:
+        system_prompt = INTERACTIVE_SYSTEM_PROMPT
+    else:
+        system_prompt = SIMPLE_SYSTEM_PROMPT
 
     # Attempt generation with retries
     for attempt in range(retry_count + 1):
@@ -407,8 +445,8 @@ def generate_artifact(
                     data["assets"]["notes"] = "Converted from React to static HTML for security"
                     logger.warning("Converted 'react' artifact type to 'html' for security")
 
-                if art_type not in ["svg", "mermaid", "html"]:
-                    raise ValueError(f"Invalid artifact type: {art_type}. Must be interactive, svg, mermaid, or html.")
+                if art_type not in ["svg", "mermaid", "html", "cad3d"]:
+                    raise ValueError(f"Invalid artifact type: {art_type}. Must be interactive, svg, mermaid, html, or cad3d.")
 
                 if "code" not in data:
                     raise ValueError("Missing required field: code")

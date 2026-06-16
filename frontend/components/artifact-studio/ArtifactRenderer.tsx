@@ -211,6 +211,22 @@ export function ArtifactRenderer({ type, code, title }: ArtifactRendererProps) {
     );
   }
 
+  // CAD3D: self-contained Three.js scene rendered in a scripts-enabled sandboxed
+  // iframe. No allow-same-origin → opaque origin, cannot touch the parent app.
+  // The code is already a full HTML document (loads Three.js from CDN).
+  if (type === "cad3d") {
+    return (
+      <iframe
+        title={title}
+        srcDoc={code}
+        sandbox="allow-scripts"
+        allow="fullscreen"
+        className="w-full h-full min-h-[480px] border-0 rounded-lg bg-[#f3f4f6] block"
+        style={{ colorScheme: "light" }}
+      />
+    );
+  }
+
   // HTML: Render in sandboxed iframe
   if (type === "html") {
     const sandboxedHtml = `
