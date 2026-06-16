@@ -139,7 +139,7 @@ def _save_artifacts(data: Dict[str, Any]) -> None:
 
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_artifact_endpoint(request: GenerateRequest):
+def generate_artifact_endpoint(request: GenerateRequest):
     """
     Generate a new artifact using Claude AI.
 
@@ -301,7 +301,7 @@ async def delete_artifact(artifact_id: str):
 
 
 @router.post("/{artifact_id}/version", response_model=GenerateResponse)
-async def create_version(artifact_id: str, request: GenerateRequest):
+def create_version(artifact_id: str, request: GenerateRequest):
     """
     Create a new version of an existing artifact.
 
