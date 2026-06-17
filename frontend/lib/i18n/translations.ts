@@ -43,7 +43,7 @@ export const translations = {
       startExtraction: "Start Extraction",
       extractingRooms: "Extracting Room Areas",
       analyzing: "Analyzing",
-      usuallyTakes: "This usually takes 5-15 seconds.",
+      usuallyTakes: "The first scan can take up to ~90s while the server wakes up — after that, just a few seconds.",
       // Results
       revisionClouds: "Revision Clouds Detected",
       potentiallyAffected: "Potentially affected rooms:",
@@ -218,7 +218,7 @@ export const translations = {
       startExtraction: "Extraktion starten",
       extractingRooms: "Extrahiere Raumflächen",
       analyzing: "Analysiere",
-      usuallyTakes: "Dies dauert normalerweise 5-15 Sekunden.",
+      usuallyTakes: "Der erste Scan kann bis zu ~90 s dauern, während der Server startet — danach nur wenige Sekunden.",
       // Results
       revisionClouds: "Revisionswolken erkannt",
       potentiallyAffected: "Möglicherweise betroffene Räume:",

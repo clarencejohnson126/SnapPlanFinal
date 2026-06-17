@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useDropzone } from "react-dropzone";
 import {
@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import {
   extractRooms,
+  prewarmBackend,
   exportToExcel,
   exportToCSV,
   generateCSV,
@@ -137,6 +138,12 @@ export default function ScanPage() {
       c.affected_room_numbers.includes(roomNumber)
     );
   };
+
+  // Wake the backend as soon as the page loads, so the Render free-tier cold
+  // start overlaps with the user picking a file instead of blocking the upload.
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
 
   // Handle file drop
   const onDrop = useCallback((acceptedFiles: File[]) => {

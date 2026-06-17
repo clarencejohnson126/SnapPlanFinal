@@ -1,0 +1,25 @@
+name: Keep backend warm
+
+# The Render free tier spins the backend instance down after ~15 min of
+# inactivity; the next request then pays a 60-90s cold start. Pinging /health
+# every 10 minutes keeps the instance awake so demos start warm (~seconds).
+#
+# Notes:
+# - Scheduled workflows only run from the default branch (main).
+# - GitHub may delay scheduled runs under load; 10 min < 15 min idle window
+#   leaves headroom. Trigger manually any time via "Run workflow".
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch: {}        # allow manual runs from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend /health
+        run: |
+          curl -sS -m 45 -o /dev/null \
+            -w "HTTP %{http_code} in %{time_total}s\n" \
+            https://snapplan-backend.onrender.com/health || true

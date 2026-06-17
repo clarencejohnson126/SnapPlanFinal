@@ -78,6 +78,18 @@ export async function checkHealth(): Promise<{ status: string; version: string }
   return response.json();
 }
 
+// Pre-warm the backend (fire-and-forget). The Render free tier spins the
+// instance down after ~15 min idle; the first request then pays a 60-90s cold
+// start. Calling this on page mount kicks off that wake-up while the user is
+// still picking a file, so the actual extraction request hits a warm server.
+export function prewarmBackend(): void {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 5000);
+  fetch(`${API_BASE}/health`, { method: 'GET', signal: controller.signal })
+    .catch(() => {})
+    .finally(() => clearTimeout(t));
+}
+
 // Detect blueprint style
 export async function detectStyle(file: File): Promise<{ style: string; confidence: number }> {
   const formData = new FormData();
@@ -126,10 +138,29 @@ export async function extractRooms(
   const paramString = params.toString();
   if (paramString) url += `?${paramString}`;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    body: formData,
-  });
+  // Generous timeout: a cold Render free-tier instance can take ~60-90s to wake
+  // up, plus ~25s for the throttled-CPU extraction. 180s covers the worst case
+  // (cold start + extraction) without ever leaving the spinner running forever.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180_000);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(
+        'Zeitüberschreitung — der Server hat zu lange gebraucht (Free-Tier-Kaltstart). Bitte erneut versuchen; der zweite Versuch ist meist schnell.'
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const error = await response.json();
