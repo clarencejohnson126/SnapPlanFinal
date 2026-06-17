@@ -435,7 +435,9 @@ export async function extractDoors(
   params.append('min_confidence', minConfidence.toString());
   params.append('dpi', dpi.toString());
 
-  const url = `${API_BASE}/api/v1/gewerke/doors/geometry?${params.toString()}`;
+  // Door stamps (Türstempel) are read directly from the plan text — fast and
+  // deterministic. (The geometry/CV path remains at /doors/geometry.)
+  const url = `${API_BASE}/api/v1/gewerke/doors/stamps?${params.toString()}`;
 
   const response = await fetch(url, {
     method: 'POST',

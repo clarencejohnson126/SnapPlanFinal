@@ -1912,6 +1912,47 @@ class DoorGeometryExtractionResponse(BaseModel):
     errors: List[str]
 
 
+@router.post("/doors/stamps")
+def extract_door_stamps_endpoint(
+    file: UploadFile = File(..., description="Floor plan PDF file"),
+    page_number: Optional[int] = Query(None, ge=1, description="Specific page to read (1-indexed). Empty = all pages."),
+    scale: Optional[int] = Query(None, gt=0, description="Scale (e.g. 100 for 1:100). Optional — stamps already carry metric dimensions."),
+):
+    """
+    Read door stamps (Türstempel) directly from the plan text — fast & deterministic.
+
+    Each door's stamp is read straight from the PDF words by position: door number,
+    fire rating (T30 / T30-RS / T90 / Standard), construction type (Bauart), width x
+    height, and acoustic rating. No computer vision, no rendering — every value comes
+    from the document text, nothing is generated. Returns in milliseconds.
+    """
+    import time
+    from ..services.door_stamp_extraction import extract_door_stamps
+
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail=f"File must be a PDF, got: {file.filename}")
+
+    temp_dir = tempfile.mkdtemp()
+    temp_path = Path(temp_dir) / file.filename
+    t0 = time.time()
+    try:
+        with open(temp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        result = extract_door_stamps(temp_path, page_number=page_number)
+        result["result_id"] = f"doors_{uuid4().hex[:12]}"
+        result["source_file"] = file.filename
+        result["extraction_time_ms"] = int((time.time() - t0) * 1000)
+        result["warnings"] = []
+        result["errors"] = []
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Door stamp extraction failed: {e}")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 @router.post("/doors/geometry", response_model=DoorGeometryExtractionResponse)
 def extract_door_geometry(
     file: UploadFile = File(..., description="Floor plan PDF file"),
