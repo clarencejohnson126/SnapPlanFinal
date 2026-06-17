@@ -158,7 +158,7 @@ async def health_check():
 
 
 @router.post("/rooms", response_model=RoomExtractionResponse)
-async def extract_rooms(
+def extract_rooms(
     file: UploadFile = File(..., description="Floor plan PDF file"),
     style: Optional[str] = Query(
         None,

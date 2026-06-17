@@ -416,7 +416,7 @@ def extract_door_labels_and_fire_ratings(pdf_path: str, page_number: int) -> Dic
 
 
 @router.post("/doors/from-plan", response_model=FloorPlanDoorsResponse)
-async def detect_doors_from_plan(
+def detect_doors_from_plan(
     file: UploadFile = File(..., description="Floor plan PDF file"),
     scale: int = Query(100, gt=0, description="Scale denominator (e.g., 100 for 1:100)"),
     page_number: int = Query(1, gt=0, description="Page number to analyze"),
@@ -621,7 +621,7 @@ async def detect_doors_from_plan(
 
 
 @router.post("/drywall/from-plan", response_model=DrywallGewerkResponse)
-async def calculate_drywall_from_plan(
+def calculate_drywall_from_plan(
     file: UploadFile = File(..., description="Floor plan PDF file"),
     wall_height_m: float = Query(2.6, gt=0, description="Wall height in meters"),
     scale: int = Query(100, gt=0, description="Scale denominator (e.g., 100 for 1:100)"),
@@ -789,7 +789,7 @@ class FlooringGewerkResponse(BaseModel):
 
 
 @router.post("/flooring/from-plan", response_model=FlooringGewerkResponse)
-async def extract_flooring_from_plan(
+def extract_flooring_from_plan(
     file: UploadFile = File(..., description="Floor plan PDF file"),
     page_number: int = Query(1, gt=0, description="Page number to analyze"),
 ):
@@ -1168,7 +1168,7 @@ class SmartDrywallResponse(BaseModel):
 
 
 @router.post("/flooring/smart", response_model=SmartFlooringResponse)
-async def extract_flooring_smart(
+def extract_flooring_smart(
     file: UploadFile = File(..., description="Floor plan PDF or image"),
     page_number: int = Query(1, gt=0, description="Page number to analyze"),
     scale: int = Query(100, gt=0, description="Scale denominator (e.g., 100 for 1:100)"),
@@ -1401,7 +1401,7 @@ async def extract_flooring_smart(
 
 
 @router.post("/drywall/smart", response_model=SmartDrywallResponse)
-async def calculate_drywall_smart(
+def calculate_drywall_smart(
     file: UploadFile = File(..., description="Floor plan PDF or image"),
     wall_height_m: float = Query(2.6, gt=0, description="Wall height in meters"),
     scale: int = Query(100, gt=0, description="Scale denominator (e.g., 100 for 1:100)"),
@@ -1589,7 +1589,7 @@ class GeometryFlooringResponse(BaseModel):
 
 
 @router.post("/flooring/geometry", response_model=GeometryFlooringResponse)
-async def extract_flooring_geometry(
+def extract_flooring_geometry(
     file: UploadFile = File(..., description="Floor plan PDF or image"),
     page_number: int = Query(1, gt=0, description="Page number to analyze"),
     scale: Optional[int] = Query(None, gt=0, description="Scale denominator (e.g., 50 for 1:50). If not provided, auto-detect."),
@@ -1913,7 +1913,7 @@ class DoorGeometryExtractionResponse(BaseModel):
 
 
 @router.post("/doors/geometry", response_model=DoorGeometryExtractionResponse)
-async def extract_door_geometry(
+def extract_door_geometry(
     file: UploadFile = File(..., description="Floor plan PDF file"),
     page_number: Optional[int] = Query(None, ge=1, description="Specific page to process (1-indexed). Leave empty for all pages."),
     scale: Optional[int] = Query(None, gt=0, description="Scale factor (e.g., 100 for 1:100). If not provided, dimensions will be in pixels only."),
