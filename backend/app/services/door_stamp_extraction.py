@@ -44,6 +44,7 @@ class DoorStamp:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "extraction_id": f"door_{self.door_number}",
             "door_number": self.door_number,
             "page_number": self.page_number,
             "fire_rating": self.fire_rating,
@@ -53,6 +54,8 @@ class DoorStamp:
             "acoustic_db": self.acoustic_db,
             "confidence": 1.0,  # deterministic text read
             "extraction_method": "door_stamp_text",
+            "assumptions": [],
+            "warnings": [],
         }
 
 
@@ -105,28 +108,34 @@ def _read_stamp(anchor, words, page_number: int, radius: float) -> DoorStamp:
             stamp.acoustic_db = int(m.group(1))
             break
 
-    # Dimensions: width is stacked directly above height, both at small +dx just
-    # above the door number. Height is the door height (~2.0-2.8 m); width is the
-    # numeric value paired directly above it in the same column.
-    nums = [(dx, dy, _num(t)) for dx, dy, t in local
-            if NUM_RE.match(t) and _num(t) is not None]
-    # Candidate heights: value 2.0-2.8, above the number, close column.
-    heights = [(dx, dy, v) for dx, dy, v in nums if 2.0 <= v <= 2.8 and dy < 5 and abs(dx) < 70]
-    if heights:
-        hdx, hdy, hv = max(heights, key=lambda n: n[1])  # closest above the number
-        stamp.height_m = round(hv, 3)
-        # Width: value 0.55-2.05, same column (|dx-hdx|<28), directly above height.
-        widths = [(dx, dy, v) for dx, dy, v in nums
-                  if 0.55 <= v <= 2.05 and abs(dx - hdx) < 28 and dy < hdy + 2]
-        if widths:
-            stamp.width_m = round(min(widths, key=lambda n: abs(n[1] - hdy))[2], 3)
+    # Dimensions: the stamp shows width stacked directly above height in the same
+    # column. Door leaf/frame values are <= ~2.95 m (room LRH 3.17 m and areas/
+    # perimeters like 11.x, 15.x are excluded by the range). Pair the UPPER number
+    # (width) with the LOWER number (height) of any tight vertical pair, and keep
+    # the pair closest to the door number. Generous range covers wide entrance
+    # doors (e.g. 2.52 x 2.74).
+    cand = [(dx, dy, _num(t)) for dx, dy, t in local
+            if NUM_RE.match(t) and _num(t) is not None and 0.5 <= _num(t) <= 2.95 and abs(dx) < 85]
+    best = None
+    best_score = 1e9
+    for ux, uy, uv in cand:          # candidate width (upper)
+        for lx, ly, lv in cand:      # candidate height (lower)
+            if (ux, uy) == (lx, ly):
+                continue
+            if abs(ux - lx) <= 26 and 0 < (ly - uy) <= 34 and lv >= uv - 0.25:
+                score = abs(uy) + abs(ux)  # closeness to the door number
+                if score < best_score:
+                    best_score = score
+                    best = (round(uv, 3), round(lv, 3))
+    if best:
+        stamp.width_m, stamp.height_m = best
     return stamp
 
 
 def extract_door_stamps(
     pdf_path,
     page_number: Optional[int] = None,
-    cluster_fraction: float = 0.02,
+    cluster_fraction: float = 0.024,
 ) -> Dict[str, Any]:
     """Read all door stamps from a plan PDF.
 
