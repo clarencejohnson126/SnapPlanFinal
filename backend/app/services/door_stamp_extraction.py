@@ -115,18 +115,24 @@ def _read_stamp(anchor, words, page_number: int, radius: float) -> DoorStamp:
     # the pair closest to the door number. Generous range covers wide entrance
     # doors (e.g. 2.52 x 2.74).
     cand = [(dx, dy, _num(t)) for dx, dy, t in local
-            if NUM_RE.match(t) and _num(t) is not None and 0.5 <= _num(t) <= 2.95 and abs(dx) < 85]
+            if NUM_RE.match(t) and _num(t) is not None and 0.5 <= _num(t) <= 2.95 and abs(dx) < 95]
     best = None
     best_score = 1e9
-    for ux, uy, uv in cand:          # candidate width (upper)
-        for lx, ly, lv in cand:      # candidate height (lower)
-            if (ux, uy) == (lx, ly):
-                continue
-            if abs(ux - lx) <= 26 and 0 < (ly - uy) <= 34 and lv >= uv - 0.25:
-                score = abs(uy) + abs(ux)  # closeness to the door number
+    for i in range(len(cand)):
+        for j in range(i + 1, len(cand)):
+            ax_, ay_, av = cand[i]
+            bx_, by_, bv = cand[j]
+            dist = ((ax_ - bx_) ** 2 + (ay_ - by_) ** 2) ** 0.5
+            hi, lo = max(av, bv), min(av, bv)
+            # A width x height pair: two numbers close together (stacked OR side by
+            # side) where the larger is a door height (>= 2.0 m). width = smaller,
+            # height = larger (covers wide entrance doors too, e.g. 2.52 x 2.74).
+            if dist <= 42 and hi >= 2.0:
+                mx, my = (ax_ + bx_) / 2.0, (ay_ + by_) / 2.0
+                score = (mx ** 2 + my ** 2) ** 0.5  # pair closest to the door number
                 if score < best_score:
                     best_score = score
-                    best = (round(uv, 3), round(lv, 3))
+                    best = (round(lo, 3), round(hi, 3))
     if best:
         stamp.width_m, stamp.height_m = best
     return stamp
