@@ -805,6 +805,77 @@ def extract_generic(lines: List[str], page_idx: int) -> List[ExtractedRoom]:
 # MAIN EXTRACTION FUNCTION
 # =============================================================================
 
+def _extract_via_stamps(path: Path) -> Optional[ExtractionResult]:
+    """
+    Read rooms by stamp position, returned in this module's result shape.
+
+    Returns None when the positional reader finds nothing usable, so the
+    line-based extractors below still get their chance on formats it does not
+    recognise. Keeping the return type identical means every existing caller —
+    the scan page, the Gewerke endpoints, the adapter — benefits without
+    changing a line.
+    """
+    try:
+        from app.services.room_stamp_extraction import extract_room_stamps
+
+        result = extract_room_stamps(path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Positionsbasierte Stempelerkennung fehlgeschlagen: %s", exc)
+        return None
+
+    usable = [s for s in result.stamps if s.area_m2 is not None]
+    if not usable:
+        return None
+
+    rooms: List[ExtractedRoom] = []
+    for stamp in usable:
+        name = stamp.name or "Unknown"
+        outdoor = is_outdoor_room(name)
+        # The outdoor factor stays where it always was in this module's output,
+        # so downstream behaviour is unchanged.
+        factor = 0.5 if outdoor else 1.0
+        rooms.append(ExtractedRoom(
+            room_number=stamp.number,
+            room_name=name,
+            area_m2=stamp.area_m2,
+            counted_m2=round(stamp.area_m2 * factor, 2),
+            factor=factor,
+            page=stamp.page_number - 1,          # this module counts from 0
+            source_text=" | ".join(stamp.raw_lines[:3]),
+            bbox=BoundingBox(*stamp.bbox),
+            category=categorize_room(name),
+            perimeter_m=stamp.perimeter_m,
+            height_m=stamp.clear_height_m,
+            factor_source="default_outdoor" if outdoor else None,
+            extraction_pattern="stamp_positional",
+        ))
+
+    warnings = list(result.warnings)
+    skipped = len(result.stamps) - len(usable)
+    if skipped:
+        warnings.append(
+            f"{skipped} Raumnummern ohne lesbare Flächenangabe — diese Räume "
+            f"fehlen im Ergebnis und sollten im Plan geprüft werden."
+        )
+
+    totals: Dict[str, float] = {}
+    for room in rooms:
+        key = room.category.value
+        totals[key] = round(totals.get(key, 0.0) + room.counted_m2, 2)
+
+    return ExtractionResult(
+        rooms=rooms,
+        total_area_m2=round(sum(r.area_m2 for r in rooms), 2),
+        total_counted_m2=round(sum(r.counted_m2 for r in rooms), 2),
+        room_count=len(rooms),
+        page_count=max((r.page for r in rooms), default=0) + 1,
+        blueprint_style=detect_blueprint_style(""),
+        extraction_method="room_stamp_positional",
+        warnings=warnings,
+        totals_by_category=totals,
+    )
+
+
 def extract_room_areas(
     pdf_path: Union[str, Path],
     style: Optional[BlueprintStyle] = None,
@@ -824,6 +895,15 @@ def extract_room_areas(
     path = Path(pdf_path)
     if not path.exists():
         raise FileNotFoundError(f"PDF not found: {path}")
+
+    # Positional reading first. The line-based extractors below assume a room's
+    # values follow its number in the text, which is false on real sheets: the
+    # SPA plans print "F= 12.14 m²" *before* "B.02.1.105", so every room was
+    # given the next room's area — 6,06 instead of 12,14, in every consumer of
+    # this function. Text order in a PDF is drawing order and means nothing.
+    positional = _extract_via_stamps(path)
+    if positional is not None:
+        return positional
 
     try:
         doc = fitz.open(str(path))

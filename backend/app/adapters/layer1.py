@@ -166,7 +166,87 @@ def attach_level_heights(elevation_pdfs: Sequence[Union[str, Path]],
 
 def _extract_rooms(path: Path, doc_id: str, model: RawModel,
                    style: Optional[str]) -> None:
-    """Map unified_extraction's rooms onto RoomSpace."""
+    """
+    Read the rooms, preferring the positional stamp reader.
+
+    `unified_extraction` walks the text line by line and assumes a room's values
+    follow its number. On the SPA sheets the number comes *after* its values, so
+    every area was taken from the next room — B.02.1.105 reported 6,06 m² where
+    the plan says 12,14. Nothing about that output looked wrong.
+
+    So position wins: `room_stamp_extraction` assigns each value to the nearest
+    room number. The line-based reader stays as a fallback for sheets whose
+    number format it recognises and the positional one does not.
+    """
+    if _extract_rooms_positional(path, doc_id, model):
+        return
+
+    model.warnings.append(
+        "Positionsbasierte Stempelerkennung lieferte keine Räume — es wurde auf "
+        "die zeilenbasierte Extraktion zurückgegriffen. Werte bitte besonders "
+        "sorgfältig prüfen."
+    )
+    _extract_rooms_linewise(path, doc_id, model, style)
+
+
+def _extract_rooms_positional(path: Path, doc_id: str, model: RawModel) -> bool:
+    """Map positionally-read Raumstempel onto RoomSpace. True if any were found."""
+    from app.services.room_stamp_extraction import extract_room_stamps
+
+    try:
+        result = extract_room_stamps(path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Stempelerkennung fehlgeschlagen für %s: %s", path.name, exc)
+        return False
+
+    usable = [s for s in result.stamps if s.area_m2 is not None]
+    if not usable:
+        return False
+
+    model.warnings.extend(result.warnings)
+
+    without_values = len(result.stamps) - len(usable)
+    if without_values:
+        model.warnings.append(
+            f"{without_values} Raumnummern ohne lesbare Flächenangabe gefunden — "
+            f"diese Räume fehlen im Aufmaß und sollten im Plan geprüft werden."
+        )
+
+    for stamp in usable:
+        model.rooms.append(RoomSpace(
+            evidence=Evidence(
+                method=ExtractionMethod.TEXT,
+                file_id=doc_id,
+                page_number=stamp.page_number,
+                geometry=Geometry(
+                    space=CoordinateSpace.PDF_POINTS,
+                    bbox=(
+                        stamp.bbox[0],
+                        stamp.bbox[1],
+                        stamp.bbox[2] - stamp.bbox[0],
+                        stamp.bbox[3] - stamp.bbox[1],
+                    ),
+                ),
+                raw_value=" | ".join(stamp.raw_lines[:4]),
+                detector="room_stamp_extraction",
+                confidence=1.0,
+            ),
+            number=stamp.number,
+            name=stamp.name,
+            floor_area_m2=stamp.area_m2,
+            perimeter_m=stamp.perimeter_m,
+            clear_height_m=stamp.clear_height_m,
+            is_outdoor=unified_extraction.is_outdoor_room(stamp.name or ""),
+            is_wet_room=_is_wet_room(stamp.name or ""),
+            attributes={"source": "stamp_positional"},
+        ))
+
+    return True
+
+
+def _extract_rooms_linewise(path: Path, doc_id: str, model: RawModel,
+                            style: Optional[str]) -> None:
+    """Fallback: map unified_extraction's rooms onto RoomSpace."""
     try:
         blueprint_style = (
             unified_extraction.BlueprintStyle(style) if style else None
