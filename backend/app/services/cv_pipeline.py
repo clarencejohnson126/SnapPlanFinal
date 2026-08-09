@@ -48,6 +48,9 @@ class ObjectType(Enum):
 
     DOOR = "door"
     WINDOW = "window"
+    TOILET = "toilet"
+    WASH_BASIN = "wash_basin"
+    CONDUIT = "conduit"
     ROOM = "room"
     FIXTURE = "fixture"  # Sinks, toilets, appliances
     WALL = "wall"
@@ -198,17 +201,45 @@ async def preprocess_page(
     Returns:
         Path to the preprocessed image
 
-    Raises:
-        NotImplementedError: Phase C implementation pending
+    If OpenCV is not installed, the original path is returned unchanged.
     """
-    # TODO: Phase C implementation with OpenCV
-    # 1. Load image with cv2.imread
-    # 2. Convert to grayscale
-    # 3. Apply CLAHE for contrast enhancement
-    # 4. Apply bilateral filter for denoising
-    # 5. Optionally apply adaptive thresholding for binarization
-    # 6. Save preprocessed image
-    raise NotImplementedError("Phase C implementation - OpenCV preprocessing pending")
+    if not CV2_AVAILABLE:
+        return image_path
+
+    img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError(f"Failed to load image: {image_path}")
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Contrast Limited Adaptive Histogram Equalization
+    if enhance_contrast:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
+
+    # Denoise (use gentle filter to preserve thin lines)
+    if denoise:
+        gray = cv2.bilateralFilter(gray, d=5, sigmaColor=40, sigmaSpace=40)
+
+    # Optional binarization for line extraction
+    if binarize:
+        gray = cv2.adaptiveThreshold(
+            gray,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            blockSize=25,
+            C=5,
+        )
+
+    # Persist to temp file
+    import tempfile
+    import os
+
+    fd, out_path = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    cv2.imwrite(out_path, gray)
+    return out_path
 
 
 async def detect_objects(
@@ -231,17 +262,15 @@ async def detect_objects(
     Returns:
         DetectionResult with detected objects
 
-    Raises:
-        NotImplementedError: Phase C implementation pending
+    Falls back to an empty result when YOLO is unavailable.
     """
-    # TODO: Phase C implementation with Ultralytics YOLO
-    # 1. Load YOLO model (trained on blueprint symbols)
-    # 2. Run inference on image
-    # 3. Filter by confidence threshold
-    # 4. Filter by requested object types
-    # 5. Create DetectedObject for each detection
-    # 6. Extract labels via OCR for nearby text
-    raise NotImplementedError("Phase C implementation - YOLO detection pending")
+    return run_object_detection_on_page(
+        image_path=image_path,
+        document_id=document_id,
+        page_number=page_number,
+        object_types=object_types,
+        confidence_threshold=confidence_threshold,
+    )
 
 
 async def detect_doors(
@@ -267,17 +296,54 @@ async def detect_doors(
     Returns:
         List of detected door objects with swing direction attributes
 
-    Raises:
-        NotImplementedError: Phase C implementation pending
     """
-    # TODO: Phase C implementation
-    # 1. Detect arcs using Hough circle detection
-    # 2. Find nearby lines of similar length to arc radius
-    # 3. Verify arc-line correlation (radius ≈ line length)
-    # 4. Determine swing direction from arc position
-    # 5. Extract door label via OCR
-    # 6. Extract fire rating from label
-    raise NotImplementedError("Phase C implementation - door detection pending")
+    # Prefer production wall-opening detector; fall back to YOLO-only
+    try:
+        from .wall_opening_detector import detect_doors_yolo_primary
+        from .wall_opening_detector import DetectionMode
+
+        # detect_doors_yolo_primary renders internally; we only use page_number
+        result = detect_doors_yolo_primary(
+            pdf_path=document_id or image_path,
+            page_number=page_number,
+            confidence_threshold=confidence_threshold,
+            mode=DetectionMode.BALANCED,
+        )
+
+        detected = []
+        for door in result.doors:
+            bbox = BoundingBox(
+                x=door.center_x - door.width_px / 2,
+                y=door.center_y - door.width_px / 2,
+                width=door.width_px,
+                height=door.width_px,
+            )
+            detected.append(
+                DetectedObject(
+                    object_id=door.opening_id,
+                    object_type=ObjectType.DOOR,
+                    bbox=bbox,
+                    confidence=door.confidence,
+                    page_number=page_number,
+                    attributes={
+                        "detection_method": "wall_opening",
+                        "width_m": door.width_m,
+                        "angle_degrees": door.angle_degrees,
+                        "wall_thickness_px": door.wall_thickness_px,
+                    },
+                )
+            )
+        return detected
+    except Exception as e:
+        logger.debug(f"Door detection fallback to YOLO only: {e}")
+        detection_result = run_object_detection_on_page(
+            image_path=image_path,
+            document_id=document_id or Path(image_path).stem,
+            page_number=page_number,
+            object_types=[ObjectType.DOOR],
+            confidence_threshold=confidence_threshold,
+        )
+        return detection_result.objects
 
 
 async def detect_rooms(
@@ -298,16 +364,47 @@ async def detect_rooms(
     Returns:
         List of detected rooms with polygon points in attributes
 
-    Raises:
-        NotImplementedError: Phase C implementation pending
     """
-    # TODO: Phase C implementation
-    # 1. Binarize image to extract walls
-    # 2. Find closed contours
-    # 3. Filter by minimum area
-    # 4. Extract room labels via OCR
-    # 5. Store polygon points in attributes
-    raise NotImplementedError("Phase C implementation - room detection pending")
+    try:
+        from .room_polygon_detector import detect_room_polygons_from_image
+        rooms = detect_room_polygons_from_image(
+            file_path=image_path,
+            page_number=page_number,
+            dpi=150,
+            min_room_area_m2=0.5,  # conservative
+        )
+
+        detected = []
+        for room in rooms:
+            # Compute bbox from polygon
+            xs = [p[0] for p in room.points]
+            ys = [p[1] for p in room.points]
+            bbox = BoundingBox(
+                x=min(xs),
+                y=min(ys),
+                width=max(xs) - min(xs),
+                height=max(ys) - min(ys),
+            )
+            detected.append(
+                DetectedObject(
+                    object_id=room.id,
+                    object_type=ObjectType.ROOM,
+                    bbox=bbox,
+                    confidence=room.confidence,
+                    page_number=page_number,
+                    label=room.label,
+                    attributes={
+                        "polygon": room.points,
+                        "area_px": room.area_px,
+                        "perimeter_px": room.perimeter_px,
+                        "source": room.source,
+                    },
+                )
+            )
+        return detected
+    except Exception as e:
+        logger.debug(f"Room detection failed: {e}")
+        return []
 
 
 async def extract_labels(
@@ -326,15 +423,36 @@ async def extract_labels(
     Returns:
         List of dictionaries with text and bounding box
 
-    Raises:
-        NotImplementedError: Phase C implementation pending
     """
-    # TODO: Phase C implementation with Tesseract/EasyOCR
-    # 1. Load image
-    # 2. If regions specified, crop to each region
-    # 3. Run OCR
-    # 4. Return text with positions
-    raise NotImplementedError("Phase C implementation - OCR pending")
+    try:
+        import pytesseract
+        from PIL import Image
+    except Exception:
+        logger.debug("OCR dependencies not installed; skipping label extraction")
+        return []
+
+    img = Image.open(image_path)
+    results: List[Dict[str, Any]] = []
+
+    if regions:
+        for region in regions:
+            crop = img.crop(
+                (
+                    int(region.x),
+                    int(region.y),
+                    int(region.x + region.width),
+                    int(region.y + region.height),
+                )
+            )
+            text = pytesseract.image_to_string(crop, lang=language).strip()
+            if text:
+                results.append({"text": text, "bbox": region.to_dict()})
+    else:
+        text = pytesseract.image_to_string(img, lang=language).strip()
+        if text:
+            results.append({"text": text, "bbox": None})
+
+    return results
 
 
 # ============================================
@@ -639,6 +757,15 @@ def _map_yolo_class_to_object_type(class_name: str) -> Optional[ObjectType]:
         "bathtub": ObjectType.FIXTURE,
         "shower": ObjectType.FIXTURE,
         "fixture": ObjectType.FIXTURE,
+        "wc": ObjectType.TOILET,
+        "toilet seat": ObjectType.TOILET,
+        "lavatory": ObjectType.WASH_BASIN,
+        "wash basin": ObjectType.WASH_BASIN,
+        "washbasin": ObjectType.WASH_BASIN,
+        "basin": ObjectType.WASH_BASIN,
+        "conduit": ObjectType.CONDUIT,
+        "pipe": ObjectType.CONDUIT,
+        "duct": ObjectType.CONDUIT,
         "scale": ObjectType.SCALE_ANNOTATION,
         "elevator": ObjectType.ELEVATOR,
     }

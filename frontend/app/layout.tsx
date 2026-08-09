@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   description: 'Turn blueprints into quantities. Extract doors, flooring, drywall, and more from construction PDFs.',
   keywords: ['construction', 'blueprint', 'takeoff', 'doors', 'flooring', 'drywall', 'measurement'],
   icons: {
-    icon: 'https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Adobe%20Express%20-%20file.png',
-    apple: 'https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Adobe%20Express%20-%20file.png',
+    icon: '/snapplan-mark.png',
+    apple: '/snapplan-mark.png',
   },
 }
 

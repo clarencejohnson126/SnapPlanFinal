@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     yolo_model_path: Optional[str] = None  # Path to YOLO model weights (.pt file)
     yolo_confidence_threshold: float = 0.15  # Lower threshold for architectural blueprints
     cv_pipeline_enabled: bool = True  # Set False to disable CV features entirely
+    cv_symbol_pipeline_enabled: bool = True  # New geometry/symbol CV pipeline
+    cv_classical_enabled: bool = True  # Enable classical OpenCV detectors
+    cv_default_dpi: int = 200  # Render DPI for CV pipeline (higher than 150 for symbols)
+    cv_debug_overlays: bool = False  # Save debug overlays with bboxes/masks
+    cv_confidence_floor: float = 0.35  # Below this mark as needs_review
+    cv_needs_review_threshold: float = 0.5  # Results below flagged for manual review
+    default_wall_height_m: Optional[float] = 2.5  # Used when computing wall area if height known
 
     @property
     def yolo_enabled(self) -> bool:
@@ -90,14 +97,6 @@ class Settings(BaseSettings):
     def supabase_enabled(self) -> bool:
         """Check if Supabase is properly configured for persistence."""
         return bool(self.supabase_url and self.supabase_service_key)
-
-    # Anthropic Configuration (for Artifact Studio)
-    anthropic_api_key: Optional[str] = None
-
-    @property
-    def anthropic_enabled(self) -> bool:
-        """Check if Anthropic API is configured for artifact generation."""
-        return bool(self.anthropic_api_key)
 
     # Door Geometry Extraction Configuration
     enable_door_geometry_extraction: bool = True

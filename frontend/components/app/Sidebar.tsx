@@ -40,11 +40,11 @@ const navItemsConfig: NavItem[] = [
     ),
   },
   {
-    href: "/app/artifact-studio",
-    labelKey: "artifactStudio",
+    href: "/app/aufmass",
+    labelKey: "aufmass",
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
     ),
   },
@@ -107,7 +107,7 @@ export function Sidebar() {
       <div className="h-16 flex items-center px-6 border-b border-white/5">
         <Link href="/app" className="flex items-center gap-3">
           <img
-            src="https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Adobe%20Express%20-%20file.png"
+            src="/snapplan-mark.png"
             alt="SnapPlan Logo"
             className="w-8 h-8 rounded-lg"
           />

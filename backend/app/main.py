@@ -15,7 +15,7 @@ from .api.jobs import router as jobs_router
 from .api.extraction import router as extraction_router
 from .api.projections import router as projections_router
 from .api.drywall_detection import router as drywall_detection_router
-from .api.artifacts import router as artifacts_router
+from .api.aufmass import router as aufmass_router
 from .core.config import settings
 
 # Create FastAPI application
@@ -75,6 +75,10 @@ app.add_middleware(
         "http://127.0.0.1:3005",
         "http://localhost:3006",
         "http://127.0.0.1:3006",
+        "http://localhost:3007",
+        "http://127.0.0.1:3007",
+        "http://localhost:3008",
+        "http://127.0.0.1:3008",
         "https://*.supabase.co",  # Supabase Edge Functions
         "https://*.supabase.net",  # Supabase alternate domain
         # Production domains
@@ -97,7 +101,7 @@ app.include_router(jobs_router, prefix="/api/v1")
 app.include_router(extraction_router, prefix="/api/v1")
 app.include_router(projections_router, prefix="/api/v1")
 app.include_router(drywall_detection_router, prefix="/api/v1")
-app.include_router(artifacts_router, prefix="/api/v1")
+app.include_router(aufmass_router, prefix="/api/v1")
 
 
 @app.get("/")

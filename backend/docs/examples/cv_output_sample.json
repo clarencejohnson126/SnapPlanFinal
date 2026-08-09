@@ -1,0 +1,69 @@
+{
+  "document_id": "sample_plan",
+  "scale": "1:100",
+  "pixels_per_meter": 58.9,
+  "pages": [
+    {
+      "page_number": 1,
+      "dpi": 200,
+      "pipeline_version": "cv-symbol-v1",
+      "processing_time_ms": 1234,
+      "warnings": [],
+      "elements": [
+        {
+          "id": "door_01",
+          "type": "door",
+          "page": 1,
+          "bbox": { "x": 1842, "y": 972, "width": 110, "height": 110 },
+          "confidence": 0.82,
+          "source": "wall_opening",
+          "attributes": { "angle_degrees": 90.0 },
+          "derived": [
+            { "name": "width", "value": 0.90, "unit": "m", "method": "opening_width", "confidence": 0.82, "notes": [] }
+          ],
+          "needs_review": false
+        },
+        {
+          "id": "window_01",
+          "type": "window",
+          "page": 1,
+          "bbox": { "x": 1210, "y": 410, "width": 260, "height": 70 },
+          "confidence": 0.63,
+          "source": "wall_opening",
+          "attributes": {},
+          "derived": [
+            { "name": "width", "value": 2.60, "unit": "m", "method": "opening_width", "confidence": 0.63, "notes": [] }
+          ],
+          "needs_review": true
+        },
+        {
+          "id": "wall_a",
+          "type": "wall",
+          "page": 1,
+          "bbox": { "x": 300, "y": 200, "width": 1800, "height": 80 },
+          "confidence": 0.70,
+          "source": "wall_mask",
+          "attributes": { "contour_area_px": 144000.0 },
+          "derived": [
+            { "name": "length", "value": 30.55, "unit": "m", "method": "bbox_scaled", "confidence": 0.70, "notes": [] }
+          ],
+          "needs_review": false
+        },
+        {
+          "id": "fixture_wc_1",
+          "type": "toilet",
+          "page": 1,
+          "bbox": { "x": 960, "y": 820, "width": 75, "height": 95 },
+          "confidence": 0.58,
+          "source": "yolo",
+          "attributes": { "yolo_class": "wc" },
+          "derived": [
+            { "name": "count", "value": 1, "unit": "count", "method": "count", "confidence": 0.58, "notes": [] }
+          ],
+          "needs_review": true
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

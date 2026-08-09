@@ -27,7 +27,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
             <img
-              src="https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Adobe%20Express%20-%20file.png"
+              src="/snapplan-mark.png"
               alt="SnapPlan Logo"
               className="w-10 h-10 sm:w-[46px] sm:h-[46px] rounded-xl"
             />
@@ -201,7 +201,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img
-                src="https://gxwzhgqeloqbgptrgcvo.supabase.co/storage/v1/object/public/all/Adobe%20Express%20-%20file.png"
+                src="/snapplan-mark.png"
                 alt="SnapPlan Logo"
                 className="w-8 h-8 rounded-lg"
               />

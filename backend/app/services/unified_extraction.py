@@ -172,7 +172,11 @@ PATTERNS = {
             re.compile(r'^F:$'),  # Split across lines
         ],
         "room_numbers": [
-            re.compile(r'^(R\d+\.E\d+\.\d+\.\d+)$'),
+            # E-1, E-2 … are basement levels. Without the optional minus every
+            # Unter- and Tiefgeschoss silently yields zero rooms, even though
+            # the plan carries its F: values as usual (found on
+            # DAR_5_ARC_BA1_R1_01_GR_U101: 45 F: values, 0 rooms extracted).
+            re.compile(r'^(R\d+\.E-?\d+\.\d+\.\d+)$'),
         ],
         "balcony_factor": re.compile(r'^50%:\s*([\d,]+)\s*m[²2]?$', re.IGNORECASE),
     },
@@ -373,8 +377,16 @@ def extract_haardtring(lines: List[str], page_idx: int) -> List[ExtractedRoom]:
     while i < len(lines):
         line = lines[i].strip()
 
-        # Look for room number pattern
-        room_match = re.match(r'^(R\d+\.E\d+\.\d+\.\d+)$', line)
+        # Look for room number pattern.
+        #
+        # Widened twice against real Haardtring plans, both of which extracted
+        # zero rooms while carrying dozens of F: values:
+        #   E-1, E-2 …      basement levels, needs the optional minus
+        #                   (GR_U101: 46 F: values, 0 rooms)
+        #   B.E-1.0.26      building prefix is a bare letter, not R + digits
+        #                   (GR_U108: 32 F: values, 0 rooms)
+        #   R1.E0.1.05.01   five segments rather than four
+        room_match = re.match(r'^([A-Z]\d*\.E-?\d+(?:\.\d+){2,3})$', line)
         if room_match:
             room_num = room_match.group(1)
             room_name = None
@@ -414,7 +426,7 @@ def extract_haardtring(lines: List[str], page_idx: int) -> List[ExtractedRoom]:
                         break
 
                 # Stop if we hit another room number
-                if re.match(r'^R\d+\.E\d+\.\d+\.\d+$', curr):
+                if re.match(r'^[A-Z]\d*\.E-?\d+(?:\.\d+){2,3}$', curr):
                     break
 
             if area:
@@ -506,11 +518,28 @@ def extract_leiq(lines: List[str], page_idx: int) -> List[ExtractedRoom]:
                     perimeter = parse_german_number(u_match.group(1))
                     continue
 
+                # U: split across lines. The room stamp wraps unpredictably —
+                # the same sheet prints both "U: 11,7405 m" and "U:" followed by
+                # "16,370 m". Only NRF handled this, which is why 19 rooms with
+                # complete stamps yielded 5 perimeters and 6 heights.
+                if curr.rstrip() in ('U:', 'U=') and j + 1 < len(lines):
+                    u_split = re.match(r'^([\d.,]+)\s*m$', lines[j + 1].strip())
+                    if u_split and perimeter is None:
+                        perimeter = parse_german_number(u_split.group(1))
+                        continue
+
                 # LH: or LRH: or LRH= height (lichte Raumhöhe)
                 lh_match = re.match(r'^L(?:R)?H[=:]\s*([\d.,]+)\s*m$', curr, re.IGNORECASE)
                 if lh_match:
                     height = parse_german_number(lh_match.group(1))
                     continue
+
+                # LH: split across lines — same wrapping issue as U: above.
+                if curr.rstrip() in ('LH:', 'LH=', 'LRH:', 'LRH=') and j + 1 < len(lines):
+                    lh_split = re.match(r'^([\d.,]+)\s*m$', lines[j + 1].strip())
+                    if lh_split and height is None:
+                        height = parse_german_number(lh_split.group(1))
+                        continue
 
                 # Stop if we hit another room number
                 if re.match(r'^B\.\d+\.[0-9A-Z]+\.[A-Z]?\d+$', curr):

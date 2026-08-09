@@ -49,6 +49,12 @@ coverage/
 .coverage
 htmlcov/
 
+# Separates Projekt, gehört nicht ins SnapPlan-Repo (1,1 GB)
+snapplan-chatgpt/
+
+# Restdaten des entfernten Artefakt-Studios
+data/artifacts.json
+
 # Misc
 *.swp
 *.swo
