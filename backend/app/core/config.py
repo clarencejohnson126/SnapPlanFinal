@@ -91,6 +91,17 @@ class Settings(BaseSettings):
     # Supabase Configuration (optional - persistence disabled if not set)
     supabase_url: Optional[str] = None
     supabase_service_key: Optional[str] = None
+
+    # Aufmaß-Persistenz. Bewusst getrennt vom Supabase-Projekt oben: dort hängen
+    # Auth und Storage, die Aufmaß-Tabellen liegen in einem zweiten Projekt, das
+    # sich SnapPlan mit einem anderen Produkt teilt (Free-Plan, zwei Projekte).
+    aufmass_supabase_url: Optional[str] = None
+    aufmass_supabase_service_key: Optional[str] = None
+
+    @property
+    def aufmass_persistence_enabled(self) -> bool:
+        """True when Aufmaß results survive a restart."""
+        return bool(self.aufmass_supabase_url and self.aufmass_supabase_service_key)
     supabase_bucket_name: str = "snapgrid-files"
 
     @property

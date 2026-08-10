@@ -1,268 +1,147 @@
--- ============================================
--- SNAPGRID AUFMASS ENGINE SCHEMA
--- ============================================
--- Additional tables for blueprint analysis, object detection, and measurement.
--- Extends the existing schema.sql tables (projects, files, extractions).
+-- SnapPlan Aufmaß — Persistenz für Schicht 2 und 3.
 --
--- Run this AFTER schema.sql to add Aufmaß engine capabilities.
--- ============================================
+-- Läuft im Supabase-Projekt BarberBuddyGPT (eoahpwciwttfavzpqfnz) mit, weil der
+-- Free-Plan nur zwei aktive Projekte erlaubt. Deshalb trägt jede Tabelle den
+-- Präfix snapplan_ — sie teilen sich die Datenbank mit einem fremden Produkt
+-- und dürfen dessen Namensraum nicht belegen.
+--
+-- Ersetzt den prozesslokalen Speicher in app/api/aufmass.py. Der hält Ergebnisse
+-- nur bis zum nächsten Neustart, was auf Render bedeutet: ein Kaltstart löscht
+-- jedes laufende Aufmaß.
 
--- ============================================
--- DETECTED OBJECTS
--- ============================================
--- Stores objects detected by the CV pipeline (doors, windows, rooms, etc.)
+-- ----------------------------------------------------------------- Jobs
 
-CREATE TABLE IF NOT EXISTS detected_objects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+create table if not exists public.snapplan_aufmass_jobs (
+    id                uuid primary key default gen_random_uuid(),
+    document_id       text not null,
+    trade             text not null,
+    ruleset_id        text,
+    ruleset_version   text,
 
-    -- Foreign keys
-    file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    analysis_id UUID NOT NULL,  -- Groups objects from same analysis run
+    -- Maßstab, mit dem gerechnet wurde. Ein Aufmaß ohne bestätigten Maßstab ist
+    -- nicht abrechnungsfähig, deshalb wird beides festgehalten.
+    scale_denominator integer,
+    scale_confirmed   boolean not null default false,
 
-    -- Object identification
-    object_type TEXT NOT NULL,  -- "door", "window", "room", "fixture", etc.
-    label TEXT,  -- OCR-extracted label if found nearby
+    -- Warnungen der Extraktion, die alle Positionen betreffen.
+    warnings          jsonb not null default '[]'::jsonb,
 
-    -- Location in page (pixel coordinates)
-    page_number INTEGER NOT NULL,
-    bbox_x REAL NOT NULL,
-    bbox_y REAL NOT NULL,
-    bbox_width REAL NOT NULL,
-    bbox_height REAL NOT NULL,
+    -- Ablageort des Plans, damit der Prüf-Screen Seiten rendern kann.
+    plan_storage_path text,
 
-    -- Detection metadata
-    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    detection_method TEXT NOT NULL,  -- "yolov8", "vector_pattern", "manual"
-    model_version TEXT,
-
-    -- Flexible attributes for object-specific data
-    -- Examples: {"fire_rating": "T30-RS", "swing_direction": "left"}
-    attributes JSONB DEFAULT '{}',
-
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_by        uuid references auth.users(id) on delete set null,
+    created_at        timestamptz not null default now(),
+    updated_at        timestamptz not null default now()
 );
 
--- Indexes for efficient queries
-CREATE INDEX IF NOT EXISTS idx_detected_objects_analysis
-    ON detected_objects(analysis_id);
-CREATE INDEX IF NOT EXISTS idx_detected_objects_type
-    ON detected_objects(object_type);
-CREATE INDEX IF NOT EXISTS idx_detected_objects_file
-    ON detected_objects(file_id);
-CREATE INDEX IF NOT EXISTS idx_detected_objects_attributes
-    ON detected_objects USING GIN (attributes);
+comment on table public.snapplan_aufmass_jobs is
+    'Ein Aufmaß-Lauf: ein Plan, ein Gewerk, ein Regelwerkstand.';
 
-COMMENT ON TABLE detected_objects IS 'Objects detected in blueprints by the CV pipeline';
-COMMENT ON COLUMN detected_objects.analysis_id IS 'Groups objects from the same analysis run';
-COMMENT ON COLUMN detected_objects.attributes IS 'Flexible JSON for object-specific attributes like fire ratings';
+create index if not exists snapplan_aufmass_jobs_created_by_idx
+    on public.snapplan_aufmass_jobs (created_by, created_at desc);
 
+-- ------------------------------------------------------------ Positionen
 
--- ============================================
--- SECTORS / ZONES
--- ============================================
--- Stores sectors/zones for area calculations and spatial queries.
--- Sectors can be rooms, zones, floors, or any defined area.
+create table if not exists public.snapplan_aufmass_positions (
+    id              uuid primary key default gen_random_uuid(),
+    job_id          uuid not null
+                      references public.snapplan_aufmass_jobs(id) on delete cascade,
 
-CREATE TABLE IF NOT EXISTS sectors (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Fachliche Kennung aus der Domäne, für Zuordnung nach einem Neuberechnen.
+    position_id     text not null,
 
-    -- Foreign key
-    file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    designation     text not null,
+    quantity        numeric(14,3) not null,
+    unit            text not null,
+    kind            text not null,
 
-    -- Sector identification
-    name TEXT NOT NULL,  -- "Apartment 3", "Corridor B", "B.01.1.017 Vorraum"
-    sector_type TEXT,  -- "room", "zone", "floor", "unit"
+    -- Der geometrische Wert vor Anwendung der Abrechnungsregeln. Erlaubt die
+    -- Anzeige "geometrisch 55,22 → abrechenbar 51,22" und belegt, dass das
+    -- Regelwerk überhaupt gegriffen hat.
+    raw_quantity    numeric(14,3),
 
-    -- Geometry (closed polygon as JSON array of [x,y] points in pixels)
-    polygon_points JSONB NOT NULL,
-    page_number INTEGER NOT NULL,
+    -- Der Rechenweg. Das ist der eigentliche Wert des Datensatzes: eine Menge
+    -- ohne nachvollziehbare Herleitung wird vom Prüfer zurückgewiesen.
+    calculation     jsonb not null default '[]'::jsonb,
 
-    -- Calculated values (populated after scale calibration)
-    area_m2 REAL,
-    perimeter_m REAL,
+    -- Belege mit Fundstelle im Plan (Seite, Geometrie in PDF-Punkten, Rohtext).
+    evidence        jsonb not null default '[]'::jsonb,
 
-    -- Additional attributes
-    attributes JSONB DEFAULT '{}',
+    warnings        jsonb not null default '[]'::jsonb,
 
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    -- auto | reviewed | corrected | manual. Nur die letzten drei sind
+    -- exportierbar — hier hängt die Haftung.
+    status          text not null default 'auto',
+    reviewed_by     text,
+    reviewed_at     timestamptz,
+
+    room_id         text,
+    room_label      text,
+    lv_position     text,
+
+    created_at      timestamptz not null default now(),
+
+    constraint snapplan_aufmass_positions_status_check
+        check (status in ('auto', 'reviewed', 'corrected', 'manual')),
+    constraint snapplan_aufmass_positions_unique_per_job
+        unique (job_id, position_id)
 );
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_sectors_file ON sectors(file_id);
-CREATE INDEX IF NOT EXISTS idx_sectors_type ON sectors(sector_type);
+comment on column public.snapplan_aufmass_positions.status is
+    'auto = Maschinenvorschlag, nicht exportierbar. reviewed/corrected/manual = ein Mensch hat die Verantwortung übernommen.';
 
-COMMENT ON TABLE sectors IS 'Sectors/zones for area calculations and spatial queries';
-COMMENT ON COLUMN sectors.polygon_points IS 'JSON array of [x,y] vertices defining the sector boundary';
+create index if not exists snapplan_aufmass_positions_job_idx
+    on public.snapplan_aufmass_positions (job_id);
 
+create index if not exists snapplan_aufmass_positions_open_idx
+    on public.snapplan_aufmass_positions (job_id)
+    where status = 'auto';
 
--- ============================================
--- MEASUREMENTS
--- ============================================
--- Stores measurements derived from detected objects with full auditability.
--- Every measurement includes source tracing for the zero-hallucination principle.
+-- ------------------------------------------------------------------- RLS
+--
+-- Aufmaße enthalten Kundendaten aus fremden Bauprojekten. Ohne RLS könnte jeder
+-- angemeldete Nutzer des mitbenutzten Projekts sie lesen.
 
-CREATE TABLE IF NOT EXISTS measurements (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+alter table public.snapplan_aufmass_jobs enable row level security;
+alter table public.snapplan_aufmass_positions enable row level security;
 
-    -- References (at least one should be set)
-    detected_object_id UUID REFERENCES detected_objects(id) ON DELETE CASCADE,
-    sector_id UUID REFERENCES sectors(id) ON DELETE SET NULL,
+drop policy if exists snapplan_jobs_owner on public.snapplan_aufmass_jobs;
+create policy snapplan_jobs_owner
+    on public.snapplan_aufmass_jobs
+    for all
+    using (created_by = auth.uid())
+    with check (created_by = auth.uid());
 
-    -- Measurement details
-    measurement_type TEXT NOT NULL,  -- "width", "height", "area", "perimeter", "count"
-    value REAL NOT NULL,
-    unit TEXT NOT NULL,  -- "m", "m2", "count"
+drop policy if exists snapplan_positions_owner on public.snapplan_aufmass_positions;
+create policy snapplan_positions_owner
+    on public.snapplan_aufmass_positions
+    for all
+    using (
+        exists (
+            select 1 from public.snapplan_aufmass_jobs j
+            where j.id = job_id and j.created_by = auth.uid()
+        )
+    )
+    with check (
+        exists (
+            select 1 from public.snapplan_aufmass_jobs j
+            where j.id = job_id and j.created_by = auth.uid()
+        )
+    );
 
-    -- Auditability fields
-    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    method TEXT NOT NULL,  -- "vector_geometry", "bbox_scaled", "polygon_area", "arc_radius"
-    scale_pixels_per_meter REAL,  -- Scale used for conversion
+-- -------------------------------------------------------- updated_at pflegen
 
-    -- Source tracing
-    source_page INTEGER NOT NULL,
-    source_bbox JSONB,  -- {x, y, width, height} for visual reference
+create or replace function public.snapplan_touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$;
 
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_measurements_object ON measurements(detected_object_id);
-CREATE INDEX IF NOT EXISTS idx_measurements_sector ON measurements(sector_id);
-CREATE INDEX IF NOT EXISTS idx_measurements_type ON measurements(measurement_type);
-
-COMMENT ON TABLE measurements IS 'Measurements with full auditability for zero-hallucination principle';
-COMMENT ON COLUMN measurements.source_bbox IS 'Bounding box for visual source reference';
-
-
--- ============================================
--- SCALE CONTEXTS
--- ============================================
--- Stores scale calibrations for pixel-to-meter conversion.
--- Supports both automatic detection and user-provided calibration.
-
-CREATE TABLE IF NOT EXISTS scale_contexts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    -- Foreign key
-    file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-
-    -- Scale information
-    scale_string TEXT,  -- Human-readable: "1:100", "1:50"
-    pixels_per_meter REAL NOT NULL,  -- Conversion factor
-
-    -- Detection source
-    detection_method TEXT NOT NULL,  -- "ocr_annotation", "dimension_line", "scale_bar", "user_input"
-    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    source_page INTEGER NOT NULL,
-    source_bbox JSONB,  -- Where scale was detected
-
-    -- For user-provided calibration
-    user_reference_px REAL,  -- Length of reference in pixels
-    user_reference_m REAL,   -- Known length of reference in meters
-
-    -- Allow multiple calibrations per file, mark one as active
-    is_active BOOLEAN DEFAULT TRUE,
-
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_scale_contexts_file ON scale_contexts(file_id);
-CREATE INDEX IF NOT EXISTS idx_scale_contexts_active ON scale_contexts(file_id, is_active) WHERE is_active = TRUE;
-
-COMMENT ON TABLE scale_contexts IS 'Scale calibrations for pixel-to-meter conversion';
-COMMENT ON COLUMN scale_contexts.is_active IS 'Only one scale context should be active per file';
-
-
--- ============================================
--- ANALYSIS RUNS
--- ============================================
--- Tracks analysis runs for grouping detected objects and measurements.
-
-CREATE TABLE IF NOT EXISTS analysis_runs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    -- Foreign key
-    file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-
-    -- Analysis metadata
-    status TEXT NOT NULL DEFAULT 'pending',  -- "pending", "processing", "completed", "failed"
-    analysis_types TEXT[] NOT NULL DEFAULT ARRAY['full'],  -- Types requested
-
-    -- Configuration
-    confidence_threshold REAL DEFAULT 0.5,
-    pages_analyzed INTEGER[],  -- NULL = all pages
-
-    -- Results summary
-    total_objects INTEGER DEFAULT 0,
-    objects_by_type JSONB DEFAULT '{}',
-
-    -- Timing
-    started_at TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ,
-    processing_time_ms INTEGER,
-
-    -- Error handling
-    error_message TEXT,
-    warnings TEXT[],
-
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_analysis_runs_file ON analysis_runs(file_id);
-CREATE INDEX IF NOT EXISTS idx_analysis_runs_status ON analysis_runs(status);
-
-COMMENT ON TABLE analysis_runs IS 'Tracks analysis runs and their results';
-
-
--- ============================================
--- HELPER FUNCTIONS
--- ============================================
-
--- Function to get the active scale context for a file
-CREATE OR REPLACE FUNCTION get_active_scale(p_file_id UUID)
-RETURNS TABLE (
-    id UUID,
-    scale_string TEXT,
-    pixels_per_meter REAL,
-    detection_method TEXT,
-    confidence REAL
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT
-        sc.id,
-        sc.scale_string,
-        sc.pixels_per_meter,
-        sc.detection_method,
-        sc.confidence
-    FROM scale_contexts sc
-    WHERE sc.file_id = p_file_id AND sc.is_active = TRUE
-    LIMIT 1;
-END;
-$$ LANGUAGE plpgsql;
-
-COMMENT ON FUNCTION get_active_scale IS 'Returns the active scale context for a file';
-
-
--- Function to count objects by type within a sector
-CREATE OR REPLACE FUNCTION count_objects_in_sector(
-    p_sector_id UUID,
-    p_object_type TEXT DEFAULT NULL
-)
-RETURNS TABLE (
-    object_type TEXT,
-    count BIGINT
-) AS $$
-BEGIN
-    -- Note: This is a placeholder that returns 0.
-    -- Full implementation requires point-in-polygon logic.
-    RETURN QUERY
-    SELECT
-        COALESCE(p_object_type, 'all')::TEXT as object_type,
-        0::BIGINT as count;
-END;
-$$ LANGUAGE plpgsql;
-
-COMMENT ON FUNCTION count_objects_in_sector IS 'Counts objects within a sector (placeholder - needs point-in-polygon)';
+drop trigger if exists snapplan_aufmass_jobs_touch on public.snapplan_aufmass_jobs;
+create trigger snapplan_aufmass_jobs_touch
+    before update on public.snapplan_aufmass_jobs
+    for each row execute function public.snapplan_touch_updated_at();

@@ -18,7 +18,7 @@ duration. Same reasoning as commit 3ead892.
 
 import logging
 import tempfile
-from dataclasses import dataclass
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +32,7 @@ from app.domain.trades import parse_trade
 from app.export import ExportBlockedError, build_csv, build_excel, build_protocol
 from app.rules import RuleParams, ruleset_catalog, run_ruleset
 from app.rules.thresholds import unverified_thresholds
+from app.services.aufmass_store import StoredJob, store
 from app.services.dimension_chains import extract_dimension_chains, points_per_metre
 
 logger = logging.getLogger(__name__)
@@ -41,49 +42,17 @@ router = APIRouter(prefix="/aufmass", tags=["Aufmaß"])
 
 # ----------------------------------------------------------------------- store
 
-@dataclass
-class _Job:
-    """A result plus the plan it came from — the review screen needs both."""
-
-    positions: PositionSet
-    pdf_path: Path
-    #: Kept alongside because chain extraction and the measuring tool both need
-    #: it, and re-reading the plan text just to find it again would be wasteful.
-    scale_denominator: Optional[int] = None
-
-
-#: Jobs by id.
-#:
-#: TRANSITIONAL. Process-local: results vanish on restart and are not shared
-#: between workers. Enough to build the review screen against, and it must move
-#: to Supabase before more than one backend process runs. The interface below is
-#: deliberately narrow so that swap touches only this block.
-_JOBS: Dict[str, _Job] = {}
-
 #: Uploaded plans are kept for the lifetime of the process so the review screen
-#: can render pages from them. Cleared by the OS when the process ends.
+#: can render pages from them. The positions themselves live in Supabase; only
+#: the file stays local, which is why a job restored after a restart can still
+#: be reviewed and exported but not re-rendered.
 _UPLOAD_DIR = Path(tempfile.mkdtemp(prefix="snapplan_plans_"))
 
 
-def _store(position_set: PositionSet, pdf_path: Path,
-           scale_denominator: Optional[int] = None) -> str:
-    job_id = f"job_{len(_JOBS) + 1}_{position_set.document_id[:24]}"
-    _JOBS[job_id] = _Job(
-        positions=position_set,
-        pdf_path=pdf_path,
-        scale_denominator=scale_denominator,
-    )
-    return job_id
-
-
-def _job(job_id: str) -> _Job:
-    job = _JOBS.get(job_id)
+def _job(job_id: str) -> StoredJob:
+    job = store.load(job_id)
     if job is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Aufmaß '{job_id}' nicht gefunden. Ergebnisse gehen bei einem "
-                   f"Neustart des Servers verloren — bitte neu analysieren.",
-        )
+        raise HTTPException(status_code=404, detail=f"Aufmaß '{job_id}' nicht gefunden.")
     return job
 
 
@@ -180,7 +149,7 @@ def analyze(
     # Kept on disk rather than streamed: the extraction services take a path,
     # and the review screen renders pages from the same file afterwards.
     stem = Path(file.filename).stem
-    pdf_path = _UPLOAD_DIR / f"{len(_JOBS) + 1}_{stem[:40]}.pdf"
+    pdf_path = _UPLOAD_DIR / f"{uuid.uuid4().hex[:8]}_{stem[:40]}.pdf"
     pdf_path.write_bytes(file.file.read())
 
     model = build_raw_model(
@@ -198,9 +167,12 @@ def analyze(
     )
     position_set = run_ruleset(model, parsed_trade, params)
 
-    job_id = _store(position_set, pdf_path, model.scale.denominator)
+    job = store.save(position_set, pdf_path, model.scale.denominator)
     payload = position_set.to_dict()
-    payload["job_id"] = job_id
+    payload["job_id"] = job.job_id
+    # Say plainly whether this result survives a restart. A reviewer who signs
+    # off forty positions deserves to know if they are only in memory.
+    payload["is_persistent"] = job.is_persistent
     payload["raw_model"] = model.to_dict()
 
     # Everything the measuring tool needs to turn two clicks into metres.
@@ -240,6 +212,7 @@ def review_position(job_id: str, position_id: str, request: ReviewRequest) -> Di
         raise HTTPException(status_code=404, detail=f"Position '{position_id}' nicht gefunden.")
 
     position.mark_reviewed(request.reviewed_by, request.corrected_quantity)
+    store.update_position(job_id, position)
 
     return {
         "position": position.to_dict(),
@@ -270,6 +243,7 @@ def review_all(job_id: str, request: ReviewAllRequest) -> Dict[str, Any]:
             skipped.append(position.position_id)
             continue
         position.mark_reviewed(request.reviewed_by)
+        store.update_position(job_id, position)
         approved.append(position.position_id)
 
     return {
