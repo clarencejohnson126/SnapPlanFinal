@@ -65,6 +65,11 @@ class DimensionChain:
     start: float                     # first segment's leading edge, in points
     end: float                       # last segment's trailing edge
     page_number: int
+    #: Where each value's text sits along the running axis, in PDF points, in
+    #: the same order as values_m. A dimension label is centred over the span it
+    #: measures, so pairing these with the cumulated metres yields the scale —
+    #: and, more importantly, proves the chain was read in the right order.
+    positions_pt: List[float] = field(default_factory=list)
 
     @property
     def total_m(self) -> float:
@@ -327,6 +332,7 @@ def _chains_along(measurements: List[Tuple[float, float, float]],
             start=ordered[0][run_index],
             end=ordered[-1][run_index],
             page_number=page_number,
+            positions_pt=[i[run_index] for i in ordered],
         ))
 
     return chains
